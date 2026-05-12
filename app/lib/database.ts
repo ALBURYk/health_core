@@ -1,5 +1,6 @@
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
+import os from "node:os";
 import { pbkdf2Sync, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 
 export type PublicUser = {
@@ -49,7 +50,7 @@ type FitnessDb = {
 export const SESSION_COOKIE = "pulsepilot_session";
 export const SESSION_MAX_AGE_SECONDS = 7 * 24 * 60 * 60;
 
-const DB_DIR = path.join(process.cwd(), ".data");
+const DB_DIR = process.env.VERCEL ? path.join(os.tmpdir(), "ai-fitness-coach-data") : path.join(process.cwd(), ".data");
 const DB_PATH = path.join(DB_DIR, "fitness-db.json");
 const PASSWORD_ITERATIONS = 120_000;
 const PASSWORD_KEY_LENGTH = 64;
