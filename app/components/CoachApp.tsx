@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type TouchEvent } from "react";
 
 type Goal = "lose" | "gain" | "fit";
 type Difficulty = "easy" | "medium" | "hard";
+type NavItemId = "home" | "food" | "history" | "chat";
 
 type ChatMessage = {
   role: "user" | "model";
@@ -11,6 +12,8 @@ type ChatMessage = {
 };
 
 type ScanResult = {
+  isFood: boolean;
+  needsReview: boolean;
   foodName: string;
   confidence: string;
   calories: number;
@@ -19,6 +22,13 @@ type ScanResult = {
   fat: number;
   portion: string;
   advice: string;
+};
+
+type FoodHistoryItem = ScanResult & {
+  id: string;
+  userId: string;
+  createdAt: string;
+  goal: string;
 };
 
 type Meal = {
@@ -208,6 +218,13 @@ const initialMessages: ChatMessage[] = [
   },
 ];
 
+const bottomNavItems: Array<{ id: NavItemId; label: string }> = [
+  { id: "home", label: "Главная" },
+  { id: "food", label: "Питание" },
+  { id: "history", label: "История" },
+  { id: "chat", label: "Чат" },
+];
+
 export default function CoachApp() {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [leaders, setLeaders] = useState<Leader[]>([]);
@@ -237,6 +254,10 @@ export default function CoachApp() {
   const [scanResult, setScanResult] = useState<ScanResult | null>(null);
   const [scanError, setScanError] = useState("");
   const [isScanning, setIsScanning] = useState(false);
+  const [foodHistory, setFoodHistory] = useState<FoodHistoryItem[]>([]);
+  const [activeNav, setActiveNav] = useState<NavItemId>("home");
+  const [tabDirection, setTabDirection] = useState<"next" | "prev">("next");
+  const swipeStart = useRef<{ x: number; y: number } | null>(null);
 
   const plan = useMemo(() => {
     const base = Math.round(10 * weight + 6.25 * height - 120);
@@ -249,7 +270,8 @@ export default function CoachApp() {
 
   const currentAdvice = goalAdvice[goal];
   const currentMealPlans = mealPlans[goal];
-  const currentMealPlan = currentMealPlans[mealIndex % currentMealPlans.length];
+  const dailyMealIndex = getDailyMealIndex(currentTime, currentMealPlans.length);
+  const currentMealPlan = currentMealPlans[(dailyMealIndex + mealIndex) % currentMealPlans.length];
   const workoutMoves = workouts[difficulty];
   const timerProgress = Math.round(((minutes * 60 - timerSeconds) / (minutes * 60)) * 100);
   const activeStats = user?.stats ?? createEmptyUserStats();
@@ -258,6 +280,9 @@ export default function CoachApp() {
   const streakDisplay = formatSignedTime(streakSecondsLeft);
   const isStreakInGrace = streakSecondsLeft < 0;
   const leaderboard = leaders;
+  const todayFood = useMemo(() => getFoodSummary(foodHistory, "today", currentTime), [currentTime, foodHistory]);
+  const weekFood = useMemo(() => getFoodSummary(foodHistory, "week", currentTime), [currentTime, foodHistory]);
+  const foodProgress = Math.min(100, Math.round((todayFood.calories / Math.max(1, plan.calories)) * 100));
 
   useEffect(() => {
     loadSession();
@@ -298,15 +323,18 @@ export default function CoachApp() {
     setIsAuthLoading(true);
 
     try {
-      const [meResponse, leadersResponse] = await Promise.all([
+      const [meResponse, leadersResponse, foodHistoryResponse] = await Promise.all([
         fetch("/api/auth/me"),
         fetch("/api/leaders"),
+        fetch("/api/food-history"),
       ]);
       const meData = await meResponse.json();
       const leadersData = await leadersResponse.json();
+      const foodHistoryData = await foodHistoryResponse.json();
 
       setUser(meData.user ?? null);
       setLeaders(Array.isArray(leadersData.leaders) ? leadersData.leaders : []);
+      setFoodHistory(Array.isArray(foodHistoryData.history) ? foodHistoryData.history : []);
     } finally {
       setIsAuthLoading(false);
     }
@@ -332,7 +360,7 @@ export default function CoachApp() {
 
       setUser(data.user);
       setAuthPassword("");
-      await loadLeaders();
+      await Promise.all([loadLeaders(), loadFoodHistory()]);
     } catch (error) {
       setAuthError(error instanceof Error ? error.message : "Ошибка авторизации");
     } finally {
@@ -344,6 +372,7 @@ export default function CoachApp() {
     await fetch("/api/auth/logout", { method: "POST" });
     setUser(null);
     setLeaders([]);
+    setFoodHistory([]);
     setIsTimerRunning(false);
     setIsFinishConfirming(false);
     setTimerSeconds(minutes * 60);
@@ -354,6 +383,13 @@ export default function CoachApp() {
     const data = await response.json();
 
     setLeaders(Array.isArray(data.leaders) ? data.leaders : []);
+  }
+
+  async function loadFoodHistory() {
+    const response = await fetch("/api/food-history");
+    const data = await response.json();
+
+    setFoodHistory(Array.isArray(data.history) ? data.history : []);
   }
 
   async function completeTraining(trainingMinutes: number) {
@@ -410,6 +446,57 @@ export default function CoachApp() {
     setIsTimerRunning(false);
     setIsFinishConfirming(false);
     setTimerSeconds(minutes * 60);
+  }
+
+  function switchNav(nextNav: NavItemId, direction?: "next" | "prev") {
+    if (nextNav === activeNav) {
+      return;
+    }
+
+    const currentIndex = bottomNavItems.findIndex((item) => item.id === activeNav);
+    const nextIndex = bottomNavItems.findIndex((item) => item.id === nextNav);
+
+    setTabDirection(direction ?? (nextIndex > currentIndex ? "next" : "prev"));
+    setActiveNav(nextNav);
+
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function handleTouchStart(event: TouchEvent<HTMLElement>) {
+    const target = event.target instanceof Element ? event.target : null;
+
+    if (target?.closest("button,input,label,textarea,select,a")) {
+      swipeStart.current = null;
+      return;
+    }
+
+    const touch = event.touches[0];
+
+    swipeStart.current = { x: touch.clientX, y: touch.clientY };
+  }
+
+  function handleTouchEnd(event: TouchEvent<HTMLElement>) {
+    if (!swipeStart.current) {
+      return;
+    }
+
+    const touch = event.changedTouches[0];
+    const deltaX = touch.clientX - swipeStart.current.x;
+    const deltaY = touch.clientY - swipeStart.current.y;
+
+    swipeStart.current = null;
+
+    if (Math.abs(deltaX) < 65 || Math.abs(deltaX) < Math.abs(deltaY) * 1.25) {
+      return;
+    }
+
+    const currentIndex = bottomNavItems.findIndex((item) => item.id === activeNav);
+    const nextIndex = deltaX < 0 ? currentIndex + 1 : currentIndex - 1;
+    const nextItem = bottomNavItems[nextIndex];
+
+    if (nextItem) {
+      switchNav(nextItem.id, deltaX < 0 ? "next" : "prev");
+    }
   }
 
   function finishTraining() {
@@ -500,6 +587,7 @@ export default function CoachApp() {
       }
 
       setScanResult(data.result);
+      await loadFoodHistory();
     } catch (error) {
       setScanError(error instanceof Error ? error.message : "Ошибка сканирования");
     } finally {
@@ -522,7 +610,7 @@ export default function CoachApp() {
           <div className="flex items-center gap-3">
             <div className="grid size-11 place-items-center rounded-lg bg-[#1f3327] font-black text-white">AI</div>
             <div>
-              <p className="text-xs font-bold uppercase text-[#e05f3d]">AI Fitness</p>
+              <p className="text-xs font-bold uppercase text-[#2c8a72]">AI Fitness</p>
               <h1 className="text-2xl font-black">Будьте Здоровы</h1>
             </div>
           </div>
@@ -581,11 +669,11 @@ export default function CoachApp() {
               />
             </label>
 
-            {authError ? <p className="rounded-lg bg-[#fff3e8] p-3 text-sm font-bold text-[#b83232]">{authError}</p> : null}
+            {authError ? <p className="rounded-lg bg-[#e7f4ee] p-3 text-sm font-bold text-[#1f3327]">{authError}</p> : null}
 
             <button
               disabled={isAuthSubmitting}
-              className="w-full rounded-lg bg-[#e05f3d] px-4 py-3 text-sm font-black text-white disabled:cursor-not-allowed disabled:bg-[#e6a08d]"
+              className="w-full rounded-lg bg-[#1f3327] px-4 py-3 text-sm font-black text-white disabled:cursor-not-allowed disabled:bg-[#9aa99e]"
             >
               {isAuthSubmitting ? "Подождите..." : authMode === "login" ? "Войти" : "Создать аккаунт"}
             </button>
@@ -600,13 +688,20 @@ export default function CoachApp() {
   }
 
   return (
-    <main className="min-h-screen bg-[#14211b] text-[#172018]">
-      <div className="mx-auto grid min-h-screen w-full max-w-6xl gap-5 px-4 py-5 lg:grid-cols-[280px_1fr]">
-        <aside className="rounded-lg border border-[#dfe5d8] bg-white p-5 shadow-sm">
+    <main className="min-h-screen bg-[#14211b] pb-28 text-[#172018]">
+      <div
+        key={activeNav}
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
+        className={`mx-auto grid min-h-screen w-full max-w-6xl gap-5 px-4 py-5 ${
+          activeNav === "home" ? "lg:grid-cols-[280px_1fr]" : ""
+        } tab-panel ${tabDirection === "next" ? "tab-panel-next" : "tab-panel-prev"}`}
+      >
+        <aside className={`${activeNav === "home" ? "block" : "hidden"} rounded-lg border border-[#dfe5d8] bg-white p-5 shadow-sm`}>
           <div className="flex items-center gap-3">
             <div className="grid size-11 place-items-center rounded-lg bg-[#1f3327] font-black text-white">AI</div>
             <div>
-              <p className="text-xs font-bold uppercase text-[#e05f3d]">AI Fitness</p>
+              <p className="text-xs font-bold uppercase text-[#2c8a72]">AI Fitness</p>
               <h1 className="text-2xl font-black">Будьте Здоровы</h1>
             </div>
           </div>
@@ -615,7 +710,7 @@ export default function CoachApp() {
             <p className="text-xs font-bold text-[#59665d]">Аккаунт</p>
             <div className="mt-1 flex items-center justify-between gap-3">
               <p className="min-w-0 truncate text-lg font-black">{user.login}</p>
-              <button onClick={logout} className="rounded-md bg-white px-2 py-1 text-xs font-black text-[#b83232]">
+              <button onClick={logout} className="rounded-md bg-white px-2 py-1 text-xs font-black text-[#1f3327]">
                 Выйти
               </button>
             </div>
@@ -642,7 +737,7 @@ export default function CoachApp() {
                     setTimerSeconds(nextMinutes * 60);
                   }
                 }}
-                className="mt-2 w-full accent-[#e05f3d]"
+                className="mt-2 w-full accent-[#2c8a72]"
               />
             </label>
 
@@ -652,20 +747,20 @@ export default function CoachApp() {
                   <p className="text-sm font-bold text-[#59665d]">Счетчик</p>
                   <p className="mt-1 text-3xl font-black text-[#1f3327]">{formatTime(timerSeconds)}</p>
                 </div>
-                <span className="rounded-md bg-white px-2 py-1 text-xs font-black text-[#e05f3d]">{timerProgress}%</span>
+                <span className="rounded-md bg-white px-2 py-1 text-xs font-black text-[#2c8a72]">{timerProgress}%</span>
               </div>
 
               <div className="mt-3 h-2 overflow-hidden rounded-full bg-white">
                 <div
-                  className="h-full rounded-full bg-[#e05f3d] transition-all"
+                  className="h-full rounded-full bg-[#2c8a72] transition-all"
                   style={{ width: `${Math.min(100, Math.max(0, timerProgress))}%` }}
                 />
               </div>
 
-              <div className={`mt-3 rounded-lg p-3 ${isStreakInGrace ? "bg-[#fff3e8]" : "bg-white"}`}>
+              <div className={`mt-3 rounded-lg p-3 ${isStreakInGrace ? "bg-[#e7f4ee]" : "bg-white"}`}>
                 <div className="flex items-center justify-between gap-2">
                   <p className="text-xs font-bold text-[#59665d]">Стрик: {activeStats.streakDays} дн.</p>
-                  <span className={`text-xs font-black ${isStreakInGrace ? "text-[#b83232]" : "text-[#2c8a72]"}`}>
+                  <span className={`text-xs font-black ${isStreakInGrace ? "text-[#59665d]" : "text-[#2c8a72]"}`}>
                     {!hasStreakTimer ? "нет таймера" : isStreakInGrace ? "просрочено" : "активно"}
                   </span>
                 </div>
@@ -693,7 +788,7 @@ export default function CoachApp() {
                 <button
                   onClick={finishTraining}
                   className={`rounded-lg px-3 py-2 text-sm font-black text-white ${
-                    isFinishConfirming ? "bg-[#b83232]" : "bg-[#e05f3d]"
+                    isFinishConfirming ? "bg-[#59665d]" : "bg-[#2c8a72]"
                   }`}
                 >
                   {isFinishConfirming ? "Уверены?" : "Закончил"}
@@ -720,7 +815,7 @@ export default function CoachApp() {
 
                 {leaderboard.map((leader, index) => (
                   <div key={leader.name} className="grid grid-cols-[28px_1fr_auto] items-center gap-2 rounded-lg bg-[#f2f5ee] p-2">
-                    <span className="grid size-7 place-items-center rounded-md bg-white text-xs font-black text-[#e05f3d]">
+                    <span className="grid size-7 place-items-center rounded-md bg-white text-xs font-black text-[#2c8a72]">
                       {index + 1}
                     </span>
                     <div className="min-w-0">
@@ -736,7 +831,7 @@ export default function CoachApp() {
         </aside>
 
         <section className="space-y-5">
-          <div className="rounded-lg border border-[#dfe5d8] bg-white p-5 shadow-sm">
+          <div className={`${activeNav === "home" ? "block" : "hidden"} rounded-lg border border-[#dfe5d8] bg-white p-5 shadow-sm`}>
             <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
               <div>
                 <p className="text-sm font-bold text-[#59665d]">Твой персональный план</p>
@@ -759,13 +854,13 @@ export default function CoachApp() {
             </div>
           </div>
 
-          <div className="grid gap-5 md:grid-cols-3">
+          <div className={`${activeNav === "home" ? "grid" : "hidden"} gap-5 md:grid-cols-3`}>
             <Card label="Калории" value={`${plan.calories} ккал`} />
             <Card label="Белок" value={`${plan.protein} г`} />
             <Card label="Тренировка" value={`${plan.burned} ккал`} />
           </div>
 
-          <div className="grid gap-5 lg:grid-cols-[1fr_1fr]">
+          <div className={`${activeNav === "home" ? "grid" : "hidden"} gap-5 lg:grid-cols-[1fr_1fr]`}>
             <div className="rounded-lg border border-[#dfe5d8] bg-white p-5 shadow-sm">
               <p className="text-sm font-bold text-[#59665d]">Совет под цель</p>
               <h3 className="mt-1 text-2xl font-black">{currentAdvice.title}</h3>
@@ -787,7 +882,7 @@ export default function CoachApp() {
                 </div>
                 <button
                   onClick={() => setIsWorkoutOpen((isOpen) => !isOpen)}
-                  className="rounded-lg bg-[#e05f3d] px-4 py-3 text-sm font-black text-white transition hover:bg-[#c84f32]"
+                  className="rounded-lg bg-[#1f3327] px-4 py-3 text-sm font-black text-white transition hover:bg-[#2c8a72]"
                 >
                   {isWorkoutOpen ? "Скрыть" : "Начать заниматься"}
                 </button>
@@ -849,16 +944,16 @@ export default function CoachApp() {
             </div>
           </div>
 
-          <div className="rounded-lg border border-[#dfe5d8] bg-[#1f3327] p-5 text-white shadow-sm">
-            <div className="grid gap-5 lg:grid-cols-[0.9fr_1.1fr]">
+          <div className={`${activeNav === "food" || activeNav === "history" ? "block" : "hidden"} rounded-lg border border-[#dfe5d8] bg-[#1f3327] p-5 text-white shadow-sm`}>
+            <div className={`${activeNav === "food" ? "grid" : "hidden"} gap-5 lg:grid-cols-[0.9fr_1.1fr]`}>
               <div>
                 <p className="text-sm font-bold text-[#b8cdbf]">Food scanner</p>
                 <h3 className="mt-1 text-2xl font-black">Покажи еду AI</h3>
                 <p className="mt-2 text-sm font-semibold leading-6 text-[#dbe8df]">
-                  Сделай фото блюда на телефоне или загрузи картинку. AI-Тренер оценит порцию, калории и КБЖУ.
+                  Сделай фото блюда на телефоне или загрузи картинку. AI-Тренер оценит порцию, калории и КБЖУ, а фото не сохранит.
                 </p>
 
-                <label className="mt-4 flex min-h-14 cursor-pointer items-center justify-center rounded-lg bg-[#f2c94c] px-4 py-3 text-center text-sm font-black text-[#172018] transition hover:bg-[#ffd95f]">
+                <label className="tap-target mt-4 flex min-h-14 cursor-pointer items-center justify-center rounded-lg bg-white px-4 py-3 text-center text-sm font-black text-[#1f3327] transition hover:bg-[#e7f4ee]">
                   Показать еду
                   <input
                     type="file"
@@ -887,10 +982,17 @@ export default function CoachApp() {
                   {isScanning ? (
                     <p className="text-sm font-bold text-[#59665d]">AI анализирует фото...</p>
                   ) : scanError ? (
-                    <p className="text-sm font-bold text-[#b83232]">{scanError}</p>
+                    <p className="text-sm font-bold text-[#1f3327]">{scanError}</p>
                   ) : scanResult ? (
                     <div>
-                      <p className="text-xs font-bold uppercase text-[#59665d]">{scanResult.confidence}</p>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="text-xs font-bold uppercase text-[#59665d]">{scanResult.confidence}</p>
+                        {scanResult.needsReview ? (
+                          <span className="rounded-md bg-[#e7f4ee] px-2 py-1 text-xs font-black text-[#1f3327]">
+                            проверить
+                          </span>
+                        ) : null}
+                      </div>
                       <h4 className="mt-1 text-xl font-black">{scanResult.foodName}</h4>
                       <p className="mt-1 text-sm font-bold text-[#59665d]">{scanResult.portion}</p>
 
@@ -913,16 +1015,85 @@ export default function CoachApp() {
                 </div>
               </div>
             </div>
+
+            <div className={`mt-5 grid gap-4 ${activeNav === "history" ? "" : "lg:grid-cols-[0.85fr_1.15fr]"}`}>
+              <div className={`${activeNav === "food" ? "block" : "hidden"} rounded-lg bg-white p-4 text-[#172018]`}>
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-bold text-[#59665d]">Прогресс питания</p>
+                    <h4 className="mt-1 text-2xl font-black">{todayFood.calories} ккал</h4>
+                  </div>
+                  <span className="rounded-md bg-[#e7f4ee] px-2 py-1 text-xs font-black text-[#2c8a72]">
+                    {foodProgress}%
+                  </span>
+                </div>
+
+                <div className="mt-3 h-2 overflow-hidden rounded-full bg-[#f2f5ee]">
+                  <div className="h-full rounded-full bg-[#2c8a72]" style={{ width: `${foodProgress}%` }} />
+                </div>
+
+                <div className="mt-4 grid grid-cols-3 gap-2">
+                  <MiniStat label="Б" value={todayFood.protein} />
+                  <MiniStat label="У" value={todayFood.carbs} />
+                  <MiniStat label="Ж" value={todayFood.fat} />
+                </div>
+
+                <p className="mt-3 text-xs font-bold leading-5 text-[#59665d]">
+                  За 7 дней: {weekFood.calories} ккал · {weekFood.items} записей. В базе хранится только текстовая история.
+                </p>
+              </div>
+
+              <div className="rounded-lg bg-white p-4 text-[#172018]">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-bold text-[#59665d]">История сканов</p>
+                    <h4 className="mt-1 text-xl font-black">Последние блюда</h4>
+                  </div>
+                  <span className="rounded-md bg-[#f2f5ee] px-2 py-1 text-xs font-black text-[#59665d]">
+                    {foodHistory.length}/50
+                  </span>
+                </div>
+
+                <div className="mt-3 max-h-56 space-y-2 overflow-y-auto">
+                  {foodHistory.length === 0 ? (
+                    <p className="rounded-lg bg-[#f2f5ee] p-3 text-sm font-bold text-[#59665d]">
+                      Сканов пока нет. Первый результат появится здесь текстом.
+                    </p>
+                  ) : null}
+
+                  {foodHistory.slice(0, 8).map((item) => (
+                    <div key={item.id} className="grid grid-cols-[1fr_auto] gap-3 rounded-lg bg-[#f2f5ee] p-3">
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="truncate text-sm font-black">{item.foodName}</p>
+                          {item.needsReview ? (
+                            <span className="rounded-md bg-white px-2 py-0.5 text-[11px] font-black text-[#1f3327]">
+                              проверить
+                            </span>
+                          ) : null}
+                        </div>
+                        <p className="mt-1 text-xs font-bold text-[#59665d]">
+                          {formatFoodDate(item.createdAt)} · {item.portion}
+                        </p>
+                      </div>
+                      <p className="text-sm font-black text-[#1f3327]">{item.calories} ккал</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
           </div>
 
-          <div className="grid gap-5 lg:grid-cols-[1fr_1fr]">
-            <div className="rounded-lg border border-[#dfe5d8] bg-white p-5 shadow-sm">
+          <div className={`${activeNav === "food" || activeNav === "chat" ? "grid" : "hidden"} gap-5`}>
+            <div className={`${activeNav === "food" ? "block" : "hidden"} rounded-lg border border-[#dfe5d8] bg-white p-5 shadow-sm`}>
               <div className="mb-4 flex items-center justify-between gap-3">
                 <div className="flex items-center gap-2">
                   <span className="rounded-md bg-[#e7f4ee] px-2 py-1 text-sm font-black text-[#2c8a72]">Food</span>
                   <div>
                     <h3 className="text-xl font-black">Меню на день</h3>
-                    <p className="mt-1 text-sm font-bold text-[#59665d]">{currentMealPlan.title}</p>
+                    <p className="mt-1 text-sm font-bold text-[#59665d]">
+                      {currentMealPlan.title} · обновляется каждый день
+                    </p>
                   </div>
                 </div>
 
@@ -962,20 +1133,20 @@ export default function CoachApp() {
               </p>
             </div>
 
-            <div className="rounded-lg border border-[#dfe5d8] bg-white p-5 shadow-sm">
+            <div className={`${activeNav === "chat" ? "block" : "hidden"} rounded-lg border border-[#dfe5d8] bg-white p-5 shadow-sm`}>
               <div className="mb-4 flex items-center gap-2">
-                <span className="rounded-md bg-[#eef0ff] px-2 py-1 text-sm font-black text-[#5661d8]">AI</span>
+                <span className="rounded-md bg-[#e7f4ee] px-2 py-1 text-sm font-black text-[#2c8a72]">AI</span>
                 <h3 className="text-xl font-black">AI Тренер</h3>
               </div>
 
-              <div className="flex max-h-80 min-h-48 flex-col gap-3 overflow-y-auto rounded-lg bg-[#eef0ff] p-4 text-sm font-semibold leading-6 text-[#23275d]">
+              <div className="flex max-h-80 min-h-48 flex-col gap-3 overflow-y-auto rounded-lg bg-[#e7f4ee] p-4 text-sm font-semibold leading-6 text-[#1f3327]">
                 {messages.map((message, index) => (
                   <div
                     key={`${message.role}-${index}`}
                     className={`max-w-[92%] rounded-lg px-3 py-2 ${
                       message.role === "user"
-                        ? "ml-auto bg-[#5661d8] text-white"
-                        : "bg-white text-[#23275d]"
+                        ? "ml-auto bg-[#1f3327] text-white"
+                        : "bg-white text-[#1f3327]"
                     }`}
                   >
                     {message.text}
@@ -987,7 +1158,7 @@ export default function CoachApp() {
                 ) : null}
               </div>
 
-              {chatError ? <p className="mt-2 text-sm font-bold text-[#b83232]">{chatError}</p> : null}
+              {chatError ? <p className="mt-2 text-sm font-bold text-[#1f3327]">{chatError}</p> : null}
 
               <form
                 className="mt-3 flex gap-2"
@@ -999,13 +1170,13 @@ export default function CoachApp() {
                 <input
                   value={question}
                   onChange={(event) => setQuestion(event.target.value)}
-                  className="min-w-0 flex-1 rounded-lg border border-[#dfe5d8] px-4 py-3 text-sm font-semibold outline-none focus:border-[#5661d8]"
+                  className="min-w-0 flex-1 rounded-lg border border-[#dfe5d8] px-4 py-3 text-sm font-semibold outline-none focus:border-[#1f3327]"
                   placeholder="Спроси AI Coach"
                 />
                 <button
                   type="submit"
                   disabled={isAsking}
-                  className="grid size-12 shrink-0 place-items-center rounded-lg bg-[#5661d8] text-sm font-black text-white disabled:cursor-not-allowed disabled:bg-[#99a0e6]"
+                  className="grid size-12 shrink-0 place-items-center rounded-lg bg-[#1f3327] text-sm font-black text-white disabled:cursor-not-allowed disabled:bg-[#9aa99e]"
                   aria-label="Спросить"
                   title="Спросить"
                 >
@@ -1016,7 +1187,86 @@ export default function CoachApp() {
           </div>
         </section>
       </div>
+
+      <nav className="fixed inset-x-3 bottom-3 z-50 mx-auto max-w-lg rounded-[32px] border border-[#dfe5d8] bg-white/92 p-1.5 shadow-[0_18px_50px_rgba(0,0,0,0.24)] backdrop-blur-md">
+        <div className="grid grid-cols-4 items-center gap-1">
+          {bottomNavItems.map((item) => {
+            const isActive = activeNav === item.id;
+
+            return (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => switchNav(item.id)}
+                className={`relative flex min-h-16 flex-col items-center justify-center gap-1 rounded-[30px] text-xs font-black transition ${
+                  isActive ? "bg-[#1f3327] text-white shadow-sm" : "text-[#59665d] hover:bg-[#f2f5ee]"
+                }`}
+                aria-label={item.label}
+                title={item.label}
+              >
+                <NavIcon id={item.id} active={isActive} />
+                <span>{item.label}</span>
+              </button>
+            );
+          })}
+        </div>
+      </nav>
     </main>
+  );
+}
+
+function NavIcon({ id, active }: { id: NavItemId; active: boolean }) {
+  const color = active ? "#ffffff" : "#1f3327";
+  const commonProps = {
+    width: 28,
+    height: 28,
+    viewBox: "0 0 24 24",
+    "aria-hidden": true,
+    className: "shrink-0",
+  };
+
+  if (id === "home") {
+    return (
+      <svg {...commonProps} fill={color}>
+        <path d="M4 10.8 12 4l8 6.8V20a1 1 0 0 1-1 1h-5v-6H10v6H5a1 1 0 0 1-1-1v-9.2Z" />
+      </svg>
+    );
+  }
+
+  if (id === "food") {
+    return (
+      <svg {...commonProps} fill="none" stroke={color} strokeLinecap="round" strokeLinejoin="round" strokeWidth="2">
+        <path d="M8 3v8" />
+        <path d="M5 3v4a3 3 0 0 0 6 0V3" />
+        <path d="M8 11v10" />
+        <path d="M16 3v18" />
+        <path d="M16 3c2.2 1.5 3.2 3.6 3 6.2-.1 1.5-1.3 2.8-3 2.8" />
+      </svg>
+    );
+  }
+
+  if (id === "history") {
+    return (
+      <svg {...commonProps} fill="none" stroke={color} strokeLinecap="round" strokeLinejoin="round" strokeWidth="2">
+        <path d="M4 12a8 8 0 1 0 2.3-5.7" />
+        <path d="M4 4v5h5" />
+        <path d="M12 8v5l3 2" />
+      </svg>
+    );
+  }
+
+  if (id === "chat") {
+    return (
+      <svg {...commonProps} fill={color}>
+        <path d="M5 5a3 3 0 0 0-3 3v6a3 3 0 0 0 3 3h8.2l4.2 3.2A1 1 0 0 0 19 19.4V17a3 3 0 0 0 3-3V8a3 3 0 0 0-3-3H5Zm2.5 5.9a1.2 1.2 0 1 1 0-2.4 1.2 1.2 0 0 1 0 2.4Zm4.5 0a1.2 1.2 0 1 1 0-2.4 1.2 1.2 0 0 1 0 2.4Zm4.5 0a1.2 1.2 0 1 1 0-2.4 1.2 1.2 0 0 1 0 2.4Z" />
+      </svg>
+    );
+  }
+
+  return (
+    <svg {...commonProps} fill={color}>
+      <path d="M5 10a2 2 0 1 0 0 4 2 2 0 0 0 0-4Zm7 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4Zm7 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4Z" />
+    </svg>
   );
 }
 
@@ -1090,6 +1340,59 @@ function formatSignedTime(totalSeconds: number) {
     sign,
     time: `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`,
   };
+}
+
+function getDailyMealIndex(now: number, count: number) {
+  const date = new Date(now);
+  const seed = Number(
+    `${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, "0")}${String(date.getDate()).padStart(2, "0")}`,
+  );
+
+  return count > 0 ? seed % count : 0;
+}
+
+function getFoodSummary(history: FoodHistoryItem[], period: "today" | "week", now: number) {
+  const todayKey = getDateKey(now);
+  const weekStart = now - 7 * 24 * 60 * 60 * 1000;
+  const items = history.filter((item) => {
+    const itemTime = Date.parse(item.createdAt);
+
+    if (!item.isFood || !Number.isFinite(itemTime)) {
+      return false;
+    }
+
+    return period === "today" ? getDateKey(itemTime) === todayKey : itemTime >= weekStart && itemTime <= now;
+  });
+
+  return items.reduce(
+    (summary, item) => ({
+      items: summary.items + 1,
+      calories: summary.calories + item.calories,
+      protein: summary.protein + item.protein,
+      carbs: summary.carbs + item.carbs,
+      fat: summary.fat + item.fat,
+    }),
+    { items: 0, calories: 0, protein: 0, carbs: 0, fat: 0 },
+  );
+}
+
+function getDateKey(value: number) {
+  return new Date(value).toLocaleDateString("en-CA");
+}
+
+function formatFoodDate(value: string) {
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "без даты";
+  }
+
+  return date.toLocaleDateString("ru-RU", {
+    day: "2-digit",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 function createEmptyUserStats(): UserStats {

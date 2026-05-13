@@ -25,6 +25,26 @@ export type Leader = {
   streakDays: number;
 };
 
+export type FoodScanInput = {
+  goal: string;
+  foodName: string;
+  confidence: string;
+  calories: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+  portion: string;
+  advice: string;
+  isFood: boolean;
+  needsReview: boolean;
+};
+
+export type FoodScanRecord = FoodScanInput & {
+  id: string;
+  userId: string;
+  createdAt: string;
+};
+
 type UserRecord = {
   id: string;
   login: string;
@@ -45,6 +65,41 @@ type SessionRecord = {
 type FitnessDb = {
   users: UserRecord[];
   sessions: SessionRecord[];
+  foodScans: FoodScanRecord[];
+};
+
+type SupabaseUserRow = {
+  id: string;
+  login: string;
+  login_key: string;
+  password_salt: string;
+  password_hash: string;
+  created_at: string;
+  stats: unknown;
+};
+
+type SupabaseSessionRow = {
+  token: string;
+  user_id: string;
+  created_at: number;
+  expires_at: number;
+};
+
+type SupabaseFoodScanRow = {
+  id: string;
+  user_id: string;
+  created_at: string;
+  goal: string | null;
+  food_name: string | null;
+  confidence: string | null;
+  calories: number | null;
+  protein: number | null;
+  carbs: number | null;
+  fat: number | null;
+  portion: string | null;
+  advice: string | null;
+  is_food: boolean | null;
+  needs_review: boolean | null;
 };
 
 export const SESSION_COOKIE = "pulsepilot_session";
@@ -55,6 +110,10 @@ const DB_PATH = path.join(DB_DIR, "fitness-db.json");
 const PASSWORD_ITERATIONS = 120_000;
 const PASSWORD_KEY_LENGTH = 64;
 const STREAK_WINDOW_MS = 24 * 60 * 60 * 1000;
+const FOOD_HISTORY_LIMIT = 50;
+const SUPABASE_USERS_TABLE = "fitness_users";
+const SUPABASE_SESSIONS_TABLE = "fitness_sessions";
+const SUPABASE_FOOD_TABLE = "food_scan_history";
 
 let dbQueue = Promise.resolve();
 
@@ -77,7 +136,11 @@ export function validateCredentials(
 }
 
 export async function registerUser(login: string, password: string) {
-  return updateDb((db) => {
+  if (isSupabaseConfigured()) {
+    return registerSupabaseUser(login, password);
+  }
+
+  return updateLocalDb((db) => {
     const loginKey = normalizeLogin(login);
 
     if (db.users.some((user) => user.loginKey === loginKey)) {
@@ -102,7 +165,17 @@ export async function registerUser(login: string, password: string) {
 }
 
 export async function verifyUser(login: string, password: string) {
-  const db = await readDb();
+  if (isSupabaseConfigured()) {
+    const user = await getSupabaseUserByLoginKey(normalizeLogin(login));
+
+    if (!user || !verifyPassword(password, user.passwordSalt, user.passwordHash)) {
+      return null;
+    }
+
+    return toPublicUser(user);
+  }
+
+  const db = await readLocalDb();
   const user = db.users.find((item) => item.loginKey === normalizeLogin(login));
 
   if (!user || !verifyPassword(password, user.passwordSalt, user.passwordHash)) {
@@ -113,7 +186,11 @@ export async function verifyUser(login: string, password: string) {
 }
 
 export async function createSession(userId: string) {
-  return updateDb((db) => {
+  if (isSupabaseConfigured()) {
+    return createSupabaseSession(userId);
+  }
+
+  return updateLocalDb((db) => {
     const now = Date.now();
     const token = randomBytes(32).toString("hex");
 
@@ -134,7 +211,12 @@ export async function deleteSession(token: string | undefined) {
     return;
   }
 
-  await updateDb((db) => {
+  if (isSupabaseConfigured()) {
+    await supabaseRequest(SUPABASE_SESSIONS_TABLE, `?token=${filterEq(token)}`, { method: "DELETE" });
+    return;
+  }
+
+  await updateLocalDb((db) => {
     db.sessions = db.sessions.filter((session) => session.token !== token);
     return null;
   });
@@ -145,7 +227,11 @@ export async function getUserBySession(token: string | undefined) {
     return null;
   }
 
-  return updateDb((db) => {
+  if (isSupabaseConfigured()) {
+    return getSupabaseUserBySession(token);
+  }
+
+  return updateLocalDb((db) => {
     const now = Date.now();
     const session = db.sessions.find((item) => item.token === token && item.expiresAt > now);
 
@@ -167,40 +253,63 @@ export async function getUserBySession(token: string | undefined) {
 
 export async function recordTraining(userId: string, minutes: number) {
   const safeMinutes = Math.max(1, Math.min(600, Math.round(minutes)));
+
+  if (isSupabaseConfigured()) {
+    return recordSupabaseTraining(userId, safeMinutes);
+  }
+
   const today = getTodayKey();
   const now = Date.now();
 
-  return updateDb((db) => {
+  return updateLocalDb((db) => {
     const user = db.users.find((item) => item.id === userId);
 
     if (!user) {
       throw new Error("Пользователь не найден");
     }
 
-    const streakExpired = user.stats.streakDeadlineAt > 0 && now - user.stats.streakDeadlineAt >= STREAK_WINDOW_MS;
-    const trainedToday = user.stats.lastWorkoutDate === today;
-    const streakTrainedToday = user.stats.lastStreakDate === today;
-
-    user.stats.minutes += safeMinutes;
-
-    if (!trainedToday) {
-      user.stats.days += 1;
-      user.stats.lastWorkoutDate = today;
-    }
-
-    if (!streakTrainedToday) {
-      user.stats.streakDays = (streakExpired ? 0 : user.stats.streakDays) + 1;
-      user.stats.lastStreakDate = today;
-    }
-
-    user.stats.streakDeadlineAt = now + STREAK_WINDOW_MS;
+    applyTrainingToUser(user, safeMinutes, today, now);
 
     return toPublicUser(user);
   });
 }
 
 export async function getLeaders(): Promise<Leader[]> {
-  return updateDb((db) => {
+  if (isSupabaseConfigured()) {
+    const users = await supabaseRequest<SupabaseUserRow[]>(
+      SUPABASE_USERS_TABLE,
+      "?select=id,login,login_key,password_salt,password_hash,created_at,stats",
+    );
+    const now = Date.now();
+    const changedUsers: UserRecord[] = [];
+
+    const leaders = users
+      .map(mapSupabaseUser)
+      .map((user) => {
+        const before = user.stats.streakDays;
+        expireUserStreak(user, now);
+
+        if (before !== user.stats.streakDays) {
+          changedUsers.push(user);
+        }
+
+        return user;
+      })
+      .map((user) => ({
+        name: user.login,
+        days: user.stats.days,
+        minutes: user.stats.minutes,
+        streakDays: user.stats.streakDays,
+      }))
+      .sort((first, second) => second.minutes - first.minutes || second.days - first.days || second.streakDays - first.streakDays)
+      .slice(0, 20);
+
+    await Promise.all(changedUsers.map((user) => patchSupabaseUserStats(user.id, user.stats)));
+
+    return leaders;
+  }
+
+  return updateLocalDb((db) => {
     const now = Date.now();
 
     db.users.forEach((user) => expireUserStreak(user, now));
@@ -217,13 +326,200 @@ export async function getLeaders(): Promise<Leader[]> {
   });
 }
 
-async function updateDb<T>(mutator: (db: FitnessDb) => T | Promise<T>) {
+export async function recordFoodScan(userId: string, scan: FoodScanInput) {
+  if (isSupabaseConfigured()) {
+    const rows = await supabaseRequest<SupabaseFoodScanRow[]>(SUPABASE_FOOD_TABLE, "", {
+      method: "POST",
+      prefer: "return=representation",
+      body: JSON.stringify({
+        id: randomUUID(),
+        user_id: userId,
+        created_at: new Date().toISOString(),
+        goal: scan.goal,
+        food_name: scan.foodName,
+        confidence: scan.confidence,
+        calories: scan.calories,
+        protein: scan.protein,
+        carbs: scan.carbs,
+        fat: scan.fat,
+        portion: scan.portion,
+        advice: scan.advice,
+        is_food: scan.isFood,
+        needs_review: scan.needsReview,
+      }),
+    });
+
+    await pruneSupabaseFoodHistory(userId);
+
+    return mapSupabaseFoodScan(rows[0]);
+  }
+
+  return updateLocalDb((db) => {
+    const record: FoodScanRecord = {
+      ...scan,
+      id: randomUUID(),
+      userId,
+      createdAt: new Date().toISOString(),
+    };
+
+    db.foodScans = [record, ...db.foodScans].sort((first, second) => Date.parse(second.createdAt) - Date.parse(first.createdAt));
+
+    const userRecords = db.foodScans.filter((item) => item.userId === userId);
+    const oldUserIds = new Set(userRecords.slice(FOOD_HISTORY_LIMIT).map((item) => item.id));
+    db.foodScans = db.foodScans.filter((item) => item.userId !== userId || !oldUserIds.has(item.id));
+
+    return record;
+  });
+}
+
+export async function getFoodScanHistory(userId: string, limit = 20): Promise<FoodScanRecord[]> {
+  const safeLimit = Math.max(1, Math.min(FOOD_HISTORY_LIMIT, Math.round(limit)));
+
+  if (isSupabaseConfigured()) {
+    const rows = await supabaseRequest<SupabaseFoodScanRow[]>(
+      SUPABASE_FOOD_TABLE,
+      `?user_id=${filterEq(userId)}&select=*&order=created_at.desc&limit=${safeLimit}`,
+    );
+
+    return rows.map(mapSupabaseFoodScan);
+  }
+
+  const db = await readLocalDb();
+
+  return db.foodScans
+    .filter((item) => item.userId === userId)
+    .sort((first, second) => Date.parse(second.createdAt) - Date.parse(first.createdAt))
+    .slice(0, safeLimit);
+}
+
+async function registerSupabaseUser(login: string, password: string) {
+  const loginKey = normalizeLogin(login);
+  const existing = await getSupabaseUserByLoginKey(loginKey);
+
+  if (existing) {
+    throw new Error("Такой логин уже зарегистрирован");
+  }
+
+  const salt = randomBytes(16).toString("hex");
+  const rows = await supabaseRequest<SupabaseUserRow[]>(SUPABASE_USERS_TABLE, "", {
+    method: "POST",
+    prefer: "return=representation",
+    body: JSON.stringify({
+      id: randomUUID(),
+      login,
+      login_key: loginKey,
+      password_salt: salt,
+      password_hash: hashPassword(password, salt),
+      created_at: new Date().toISOString(),
+      stats: createEmptyStats(),
+    }),
+  });
+
+  return toPublicUser(mapSupabaseUser(rows[0]));
+}
+
+async function createSupabaseSession(userId: string) {
+  const now = Date.now();
+  const token = randomBytes(32).toString("hex");
+
+  await supabaseRequest(SUPABASE_SESSIONS_TABLE, `?user_id=${filterEq(userId)}`, { method: "DELETE" });
+  await supabaseRequest(SUPABASE_SESSIONS_TABLE, `?expires_at=lte.${now}`, { method: "DELETE" });
+  await supabaseRequest(SUPABASE_SESSIONS_TABLE, "", {
+    method: "POST",
+    body: JSON.stringify({
+      token,
+      user_id: userId,
+      created_at: now,
+      expires_at: now + SESSION_MAX_AGE_SECONDS * 1000,
+    }),
+  });
+
+  return token;
+}
+
+async function getSupabaseUserBySession(token: string) {
+  const now = Date.now();
+  const sessions = await supabaseRequest<SupabaseSessionRow[]>(
+    SUPABASE_SESSIONS_TABLE,
+    `?token=${filterEq(token)}&expires_at=gt.${now}&select=*`,
+  );
+  const session = sessions[0];
+
+  if (!session) {
+    return null;
+  }
+
+  const user = await getSupabaseUserById(session.user_id);
+
+  if (!user) {
+    return null;
+  }
+
+  const before = user.stats.streakDays;
+  expireUserStreak(user, now);
+
+  if (before !== user.stats.streakDays) {
+    await patchSupabaseUserStats(user.id, user.stats);
+  }
+
+  return toPublicUser(user);
+}
+
+async function recordSupabaseTraining(userId: string, minutes: number) {
+  const user = await getSupabaseUserById(userId);
+
+  if (!user) {
+    throw new Error("Пользователь не найден");
+  }
+
+  applyTrainingToUser(user, minutes, getTodayKey(), Date.now());
+  await patchSupabaseUserStats(user.id, user.stats);
+
+  return toPublicUser(user);
+}
+
+async function getSupabaseUserByLoginKey(loginKey: string) {
+  const users = await supabaseRequest<SupabaseUserRow[]>(
+    SUPABASE_USERS_TABLE,
+    `?login_key=${filterEq(loginKey)}&select=*`,
+  );
+
+  return users[0] ? mapSupabaseUser(users[0]) : null;
+}
+
+async function getSupabaseUserById(id: string) {
+  const users = await supabaseRequest<SupabaseUserRow[]>(SUPABASE_USERS_TABLE, `?id=${filterEq(id)}&select=*`);
+
+  return users[0] ? mapSupabaseUser(users[0]) : null;
+}
+
+async function patchSupabaseUserStats(userId: string, stats: UserStats) {
+  await supabaseRequest(SUPABASE_USERS_TABLE, `?id=${filterEq(userId)}`, {
+    method: "PATCH",
+    body: JSON.stringify({ stats }),
+  });
+}
+
+async function pruneSupabaseFoodHistory(userId: string) {
+  const oldRows = await supabaseRequest<Array<{ id: string }>>(
+    SUPABASE_FOOD_TABLE,
+    `?user_id=${filterEq(userId)}&select=id&order=created_at.desc&offset=${FOOD_HISTORY_LIMIT}`,
+  );
+
+  if (oldRows.length === 0) {
+    return;
+  }
+
+  await supabaseRequest(SUPABASE_FOOD_TABLE, `?id=in.(${oldRows.map((row) => row.id).join(",")})`, { method: "DELETE" });
+}
+
+async function updateLocalDb<T>(mutator: (db: FitnessDb) => T | Promise<T>) {
   const run = dbQueue.then(async () => {
-    const db = await readDb();
+    const db = await readLocalDb();
     const result = await mutator(db);
 
     db.sessions = db.sessions.filter((session) => session.expiresAt > Date.now());
-    await writeDb(db);
+    await writeLocalDb(db);
 
     return result;
   });
@@ -236,7 +532,7 @@ async function updateDb<T>(mutator: (db: FitnessDb) => T | Promise<T>) {
   return run;
 }
 
-async function readDb(): Promise<FitnessDb> {
+async function readLocalDb(): Promise<FitnessDb> {
   await mkdir(DB_DIR, { recursive: true });
 
   try {
@@ -246,22 +542,94 @@ async function readDb(): Promise<FitnessDb> {
     return {
       users: Array.isArray(parsed.users) ? parsed.users : [],
       sessions: Array.isArray(parsed.sessions) ? parsed.sessions : [],
+      foodScans: Array.isArray(parsed.foodScans) ? parsed.foodScans : [],
     };
   } catch (error) {
     if (error instanceof Error && "code" in error && error.code === "ENOENT") {
-      return { users: [], sessions: [] };
+      return { users: [], sessions: [], foodScans: [] };
     }
 
     throw error;
   }
 }
 
-async function writeDb(db: FitnessDb) {
+async function writeLocalDb(db: FitnessDb) {
   await mkdir(DB_DIR, { recursive: true });
 
   const tempPath = `${DB_PATH}.${process.pid}.tmp`;
   await writeFile(tempPath, JSON.stringify(db, null, 2), "utf8");
   await rename(tempPath, DB_PATH);
+}
+
+async function supabaseRequest<T = unknown>(
+  table: string,
+  query: string,
+  options: RequestInit & { prefer?: string } = {},
+): Promise<T> {
+  const config = getSupabaseConfig();
+
+  if (!config) {
+    throw new Error("Supabase не настроен");
+  }
+
+  const response = await fetch(`${config.url}/rest/v1/${table}${query}`, {
+    ...options,
+    cache: "no-store",
+    headers: {
+      apikey: config.key,
+      Authorization: `Bearer ${config.key}`,
+      "Content-Type": "application/json",
+      ...(options.prefer ? { Prefer: options.prefer } : {}),
+      ...options.headers,
+    },
+  });
+  const text = await response.text();
+  const data = text ? JSON.parse(text) : null;
+
+  if (!response.ok) {
+    const message = typeof data?.message === "string" ? data.message : "Supabase request failed";
+    throw new Error(`${message}. Проверь таблицы из supabase/schema.sql и переменные SUPABASE_URL/SUPABASE_SERVICE_ROLE_KEY.`);
+  }
+
+  return data as T;
+}
+
+function getSupabaseConfig() {
+  const rawUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY;
+
+  if (!rawUrl || !key) {
+    return null;
+  }
+
+  return {
+    url: rawUrl.replace(/\/$/, ""),
+    key,
+  };
+}
+
+function isSupabaseConfigured() {
+  return Boolean(getSupabaseConfig());
+}
+
+function applyTrainingToUser(user: UserRecord, safeMinutes: number, today: string, now: number) {
+  const streakExpired = user.stats.streakDeadlineAt > 0 && now - user.stats.streakDeadlineAt >= STREAK_WINDOW_MS;
+  const trainedToday = user.stats.lastWorkoutDate === today;
+  const streakTrainedToday = user.stats.lastStreakDate === today;
+
+  user.stats.minutes += safeMinutes;
+
+  if (!trainedToday) {
+    user.stats.days += 1;
+    user.stats.lastWorkoutDate = today;
+  }
+
+  if (!streakTrainedToday) {
+    user.stats.streakDays = (streakExpired ? 0 : user.stats.streakDays) + 1;
+    user.stats.lastStreakDate = today;
+  }
+
+  user.stats.streakDeadlineAt = now + STREAK_WINDOW_MS;
 }
 
 function createEmptyStats(): UserStats {
@@ -280,6 +648,54 @@ function toPublicUser(user: UserRecord): PublicUser {
     id: user.id,
     login: user.login,
     stats: user.stats,
+  };
+}
+
+function mapSupabaseUser(row: SupabaseUserRow): UserRecord {
+  return {
+    id: row.id,
+    login: row.login,
+    loginKey: row.login_key,
+    passwordSalt: row.password_salt,
+    passwordHash: row.password_hash,
+    createdAt: row.created_at,
+    stats: normalizeStats(row.stats),
+  };
+}
+
+function mapSupabaseFoodScan(row: SupabaseFoodScanRow): FoodScanRecord {
+  return {
+    id: row.id,
+    userId: row.user_id,
+    createdAt: row.created_at,
+    goal: row.goal || "",
+    foodName: row.food_name || "Неизвестно",
+    confidence: row.confidence || "средняя",
+    calories: toNumber(row.calories),
+    protein: toNumber(row.protein),
+    carbs: toNumber(row.carbs),
+    fat: toNumber(row.fat),
+    portion: row.portion || "Порция не определена",
+    advice: row.advice || "",
+    isFood: row.is_food ?? true,
+    needsReview: row.needs_review ?? false,
+  };
+}
+
+function normalizeStats(stats: unknown): UserStats {
+  if (!stats || typeof stats !== "object") {
+    return createEmptyStats();
+  }
+
+  const maybeStats = stats as Partial<UserStats>;
+
+  return {
+    days: toNumber(maybeStats.days),
+    minutes: toNumber(maybeStats.minutes),
+    lastWorkoutDate: typeof maybeStats.lastWorkoutDate === "string" ? maybeStats.lastWorkoutDate : "",
+    streakDays: toNumber(maybeStats.streakDays),
+    lastStreakDate: typeof maybeStats.lastStreakDate === "string" ? maybeStats.lastStreakDate : "",
+    streakDeadlineAt: toNumber(maybeStats.streakDeadlineAt),
   };
 }
 
@@ -307,4 +723,13 @@ function verifyPassword(password: string, salt: string, expectedHash: string) {
 
 function getTodayKey() {
   return new Date().toLocaleDateString("en-CA");
+}
+
+function filterEq(value: string) {
+  return encodeURIComponent(`eq.${value}`);
+}
+
+function toNumber(value: unknown) {
+  const number = Number(value);
+  return Number.isFinite(number) ? Math.max(0, Math.round(number)) : 0;
 }

@@ -1,3 +1,6 @@
+import { cookies } from "next/headers";
+import { SESSION_COOKIE, getUserBySession, recordFoodScan } from "@/app/lib/database";
+
 type GeminiPart = {
   text?: string;
 };
@@ -43,11 +46,13 @@ export async function POST(request: Request) {
   const base64Image = buffer.toString("base64");
 
   const prompt = [
-    "Ты AI fitness nutrition coach.",
-    "Определи еду на фото и оцени калории. Это приблизительная оценка, не медицинский диагноз.",
+    "Ты AI fitness nutrition coach и строгий визуальный классификатор еды.",
+    "Сначала проверь, есть ли на фото настоящая видимая еда или напиток. Если это ноутбук, экран, комната, человек, упаковка без видимой еды или любой неясный объект, не угадывай блюдо.",
+    "Если еды нет или она неразборчива, поставь isFood=false, needsReview=true, calories/protein/carbs/fat=0, foodName='На фото не еда', portion='Еда не определена'.",
+    "Если еда есть, оцени калории и КБЖУ приблизительно, но честно снижай confidence и ставь needsReview=true при плохом освещении, частично закрытой тарелке или неоднозначном блюде.",
     `Цель пользователя: ${goal}.`,
     "Верни только валидный JSON без markdown:",
-    '{"foodName":"string","confidence":"низкая|средняя|высокая","calories":number,"protein":number,"carbs":number,"fat":number,"portion":"string","advice":"string"}',
+    '{"isFood":boolean,"needsReview":boolean,"foodName":"string","confidence":"низкая|средняя|высокая","calories":number,"protein":number,"carbs":number,"fat":number,"portion":"string","advice":"string"}',
   ].join(" ");
 
   const response = await fetch(
@@ -72,6 +77,10 @@ export async function POST(request: Request) {
             ],
           },
         ],
+        generationConfig: {
+          temperature: 0.15,
+          responseMimeType: "application/json",
+        },
       }),
     },
   );
@@ -92,6 +101,16 @@ export async function POST(request: Request) {
     return Response.json({ error: "AI вернул ответ в неожиданном формате" }, { status: 502 });
   }
 
+  const cookieStore = await cookies();
+  const user = await getUserBySession(cookieStore.get(SESSION_COOKIE)?.value);
+
+  if (user) {
+    await recordFoodScan(user.id, {
+      ...result,
+      goal,
+    });
+  }
+
   return Response.json({ result });
 }
 
@@ -105,16 +124,25 @@ function parseGeminiJson(text: string) {
 
   try {
     const parsed = JSON.parse(cleaned);
+    const isFood = parsed.isFood === false ? false : true;
+    const needsReview = Boolean(parsed.needsReview) || !isFood || parsed.confidence === "низкая";
 
     return {
-      foodName: String(parsed.foodName || "Неизвестное блюдо"),
+      isFood,
+      needsReview,
+      foodName: String(parsed.foodName || (isFood ? "Неизвестное блюдо" : "На фото не еда")),
       confidence: String(parsed.confidence || "средняя"),
-      calories: toNumber(parsed.calories),
-      protein: toNumber(parsed.protein),
-      carbs: toNumber(parsed.carbs),
-      fat: toNumber(parsed.fat),
-      portion: String(parsed.portion || "Порция не определена"),
-      advice: String(parsed.advice || "Проверь результат и при необходимости уточни порцию вручную."),
+      calories: isFood ? toNumber(parsed.calories) : 0,
+      protein: isFood ? toNumber(parsed.protein) : 0,
+      carbs: isFood ? toNumber(parsed.carbs) : 0,
+      fat: isFood ? toNumber(parsed.fat) : 0,
+      portion: String(parsed.portion || (isFood ? "Порция не определена" : "Еда не определена")),
+      advice: String(
+        parsed.advice ||
+          (isFood
+            ? "Проверь результат и при необходимости уточни порцию вручную."
+            : "Я не буду записывать калории по фото без явной еды. Сделай снимок тарелки ближе и при хорошем свете."),
+      ),
     };
   } catch {
     return null;
