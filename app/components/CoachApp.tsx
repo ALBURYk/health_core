@@ -32,6 +32,7 @@ type FoodHistoryItem = ScanResult & {
 };
 
 type Meal = {
+  slot: string;
   name: string;
   kcal: number;
   protein: number;
@@ -103,27 +104,33 @@ const mealPlans: Record<Goal, MealPlan[]> = {
       title: "Легкий дефицит",
       advice: "Меньше масла и соусов, больше белка и овощей.",
       meals: [
-        { name: "Омлет + овощи + зелень", kcal: 330, protein: 28 },
-        { name: "Курица + гречка + салат", kcal: 510, protein: 44 },
-        { name: "Творог + ягоды", kcal: 280, protein: 31 },
+        { slot: "Завтрак", name: "Омлет + овощи + зелень", kcal: 330, protein: 28 },
+        { slot: "Перекус", name: "Греческий йогурт + ягоды", kcal: 180, protein: 17 },
+        { slot: "Обед", name: "Курица + гречка + салат", kcal: 510, protein: 44 },
+        { slot: "Перекус", name: "Яблоко + творог", kcal: 210, protein: 18 },
+        { slot: "Ужин", name: "Творог + ягоды", kcal: 280, protein: 31 },
       ],
     },
     {
       title: "Сытный день",
       advice: "Подходит, если вечером часто тянет на перекусы.",
       meals: [
-        { name: "Греческий йогурт + яблоко", kcal: 300, protein: 24 },
-        { name: "Рыба + картофель + огурцы", kcal: 520, protein: 39 },
-        { name: "Индейка + овощной суп", kcal: 430, protein: 36 },
+        { slot: "Завтрак", name: "Греческий йогурт + яблоко", kcal: 300, protein: 24 },
+        { slot: "Перекус", name: "Морковь + хумус", kcal: 170, protein: 7 },
+        { slot: "Обед", name: "Рыба + картофель + огурцы", kcal: 520, protein: 39 },
+        { slot: "Перекус", name: "Кефир + хлебец", kcal: 190, protein: 11 },
+        { slot: "Ужин", name: "Индейка + овощной суп", kcal: 430, protein: 36 },
       ],
     },
     {
       title: "Быстро приготовить",
       advice: "Минимум готовки, но нормальный белок остается.",
       meals: [
-        { name: "Яйца + цельнозерновой хлеб", kcal: 360, protein: 25 },
-        { name: "Тунец + рис + овощи", kcal: 490, protein: 42 },
-        { name: "Кефир + творог + корица", kcal: 310, protein: 34 },
+        { slot: "Завтрак", name: "Яйца + цельнозерновой хлеб", kcal: 360, protein: 25 },
+        { slot: "Перекус", name: "Протеиновый йогурт", kcal: 160, protein: 20 },
+        { slot: "Обед", name: "Тунец + рис + овощи", kcal: 490, protein: 42 },
+        { slot: "Перекус", name: "Груша + сыр", kcal: 220, protein: 12 },
+        { slot: "Ужин", name: "Кефир + творог + корица", kcal: 310, protein: 34 },
       ],
     },
   ],
@@ -132,27 +139,33 @@ const mealPlans: Record<Goal, MealPlan[]> = {
       title: "Рост мышц",
       advice: "Добавь углеводы после тренировки и не пропускай белок.",
       meals: [
-        { name: "Овсянка + йогурт + банан", kcal: 520, protein: 30 },
-        { name: "Курица + рис + овощи", kcal: 680, protein: 52 },
-        { name: "Творог + орехи + мед", kcal: 460, protein: 35 },
+        { slot: "Завтрак", name: "Овсянка + йогурт + банан", kcal: 520, protein: 30 },
+        { slot: "Перекус", name: "Тост + арахисовая паста", kcal: 320, protein: 12 },
+        { slot: "Обед", name: "Курица + рис + овощи", kcal: 680, protein: 52 },
+        { slot: "Перекус", name: "Кефир + банан", kcal: 280, protein: 14 },
+        { slot: "Ужин", name: "Творог + орехи + мед", kcal: 460, protein: 35 },
       ],
     },
     {
       title: "Больше калорий",
       advice: "Если вес стоит, добавь один плотный прием пищи.",
       meals: [
-        { name: "Омлет + сыр + тост", kcal: 560, protein: 34 },
-        { name: "Говядина + паста + салат", kcal: 760, protein: 50 },
-        { name: "Йогурт + мюсли + ягоды", kcal: 430, protein: 26 },
+        { slot: "Завтрак", name: "Омлет + сыр + тост", kcal: 560, protein: 34 },
+        { slot: "Перекус", name: "Йогурт + мюсли", kcal: 350, protein: 18 },
+        { slot: "Обед", name: "Говядина + паста + салат", kcal: 760, protein: 50 },
+        { slot: "Перекус", name: "Банан + орехи", kcal: 330, protein: 9 },
+        { slot: "Ужин", name: "Йогурт + мюсли + ягоды", kcal: 430, protein: 26 },
       ],
     },
     {
       title: "После тренировки",
       advice: "Этот вариант лучше ставить в день силовой тренировки.",
       meals: [
-        { name: "Рис + тунец + авокадо", kcal: 650, protein: 45 },
-        { name: "Индейка + картофель", kcal: 700, protein: 48 },
-        { name: "Протеиновый йогурт + банан", kcal: 390, protein: 32 },
+        { slot: "Завтрак", name: "Рис + тунец + авокадо", kcal: 650, protein: 45 },
+        { slot: "Перекус", name: "Смузи с молоком и бананом", kcal: 360, protein: 18 },
+        { slot: "Обед", name: "Индейка + картофель", kcal: 700, protein: 48 },
+        { slot: "Перекус", name: "Творог + мед", kcal: 310, protein: 29 },
+        { slot: "Ужин", name: "Протеиновый йогурт + банан", kcal: 390, protein: 32 },
       ],
     },
   ],
@@ -161,27 +174,33 @@ const mealPlans: Record<Goal, MealPlan[]> = {
       title: "Баланс на день",
       advice: "Ровный вариант без жестких ограничений.",
       meals: [
-        { name: "Овсянка + ягоды + орехи", kcal: 430, protein: 22 },
-        { name: "Лосось + картофель + салат", kcal: 620, protein: 38 },
-        { name: "Кефир + творог + фрукт", kcal: 350, protein: 30 },
+        { slot: "Завтрак", name: "Овсянка + ягоды + орехи", kcal: 430, protein: 22 },
+        { slot: "Перекус", name: "Фрукт + греческий йогурт", kcal: 230, protein: 16 },
+        { slot: "Обед", name: "Лосось + картофель + салат", kcal: 620, protein: 38 },
+        { slot: "Перекус", name: "Хлебец + сыр", kcal: 210, protein: 12 },
+        { slot: "Ужин", name: "Кефир + творог + фрукт", kcal: 350, protein: 30 },
       ],
     },
     {
       title: "Больше энергии",
       advice: "Хорошо подходит в активный день.",
       meals: [
-        { name: "Омлет + овощи + тост", kcal: 450, protein: 29 },
-        { name: "Курица + булгур + салат", kcal: 610, protein: 45 },
-        { name: "Йогурт + банан + семена", kcal: 370, protein: 23 },
+        { slot: "Завтрак", name: "Омлет + овощи + тост", kcal: 450, protein: 29 },
+        { slot: "Перекус", name: "Банан + кефир", kcal: 260, protein: 12 },
+        { slot: "Обед", name: "Курица + булгур + салат", kcal: 610, protein: 45 },
+        { slot: "Перекус", name: "Орехи + яблоко", kcal: 250, protein: 6 },
+        { slot: "Ужин", name: "Йогурт + банан + семена", kcal: 370, protein: 23 },
       ],
     },
     {
       title: "Спокойный вечер",
       advice: "Легко для желудка, но не пусто по белку.",
       meals: [
-        { name: "Индейка + овощи на сковороде", kcal: 430, protein: 40 },
-        { name: "Рыба + салат + хлебец", kcal: 470, protein: 36 },
-        { name: "Творог + ягоды", kcal: 300, protein: 31 },
+        { slot: "Завтрак", name: "Индейка + овощи на сковороде", kcal: 430, protein: 40 },
+        { slot: "Перекус", name: "Кефир + ягоды", kcal: 190, protein: 11 },
+        { slot: "Обед", name: "Рыба + салат + хлебец", kcal: 470, protein: 36 },
+        { slot: "Перекус", name: "Творог + фрукт", kcal: 260, protein: 24 },
+        { slot: "Ужин", name: "Творог + ягоды", kcal: 300, protein: 31 },
       ],
     },
   ],
@@ -271,7 +290,9 @@ export default function CoachApp() {
   const currentAdvice = goalAdvice[goal];
   const currentMealPlans = mealPlans[goal];
   const dailyMealIndex = getDailyMealIndex(currentTime, currentMealPlans.length);
-  const currentMealPlan = currentMealPlans[(dailyMealIndex + mealIndex) % currentMealPlans.length];
+  const currentMealPlanIndex = (dailyMealIndex + mealIndex) % currentMealPlans.length;
+  const currentMealPlan = currentMealPlans[currentMealPlanIndex];
+  const currentMenuDate = formatMenuDate(currentTime);
   const workoutMoves = workouts[difficulty];
   const timerProgress = Math.round(((minutes * 60 - timerSeconds) / (minutes * 60)) * 100);
   const activeStats = user?.stats ?? createEmptyUserStats();
@@ -688,7 +709,7 @@ export default function CoachApp() {
   }
 
   return (
-    <main className="min-h-screen bg-[#14211b] pb-28 text-[#172018]">
+    <main className="min-h-screen overflow-x-hidden bg-[#14211b] pb-28 text-[#172018]">
       <div
         key={activeNav}
         onTouchStart={handleTouchStart}
@@ -1092,7 +1113,7 @@ export default function CoachApp() {
                   <div>
                     <h3 className="text-xl font-black">Меню на день</h3>
                     <p className="mt-1 text-sm font-bold text-[#59665d]">
-                      {currentMealPlan.title} · обновляется каждый день
+                      {currentMenuDate} · {currentMealPlan.title} · меню #{currentMealPlanIndex + 1}
                     </p>
                   </div>
                 </div>
@@ -1120,6 +1141,7 @@ export default function CoachApp() {
               <div className="space-y-3">
                 {currentMealPlan.meals.map((meal) => (
                   <div key={meal.name} className="rounded-lg bg-[#f2f5ee] p-4">
+                    <p className="text-xs font-black uppercase text-[#2c8a72]">{meal.slot}</p>
                     <p className="font-bold">{meal.name}</p>
                     <p className="mt-1 text-sm font-semibold text-[#59665d]">
                       {meal.kcal} ккал · {meal.protein} г белка
@@ -1129,7 +1151,7 @@ export default function CoachApp() {
               </div>
 
               <p className="mt-4 rounded-lg bg-[#e7f4ee] p-3 text-sm font-bold leading-6 text-[#2c8a72]">
-                {currentMealPlan.advice}
+                {currentMealPlan.advice} Меню обновится завтра автоматически.
               </p>
             </div>
 
@@ -1188,7 +1210,7 @@ export default function CoachApp() {
         </section>
       </div>
 
-      <nav className="fixed inset-x-3 bottom-3 z-50 mx-auto max-w-lg rounded-[32px] border border-[#dfe5d8] bg-white/92 p-1.5 shadow-[0_18px_50px_rgba(0,0,0,0.24)] backdrop-blur-md">
+      <nav className="bottom-nav fixed z-50 max-w-lg rounded-[32px] border border-[#dfe5d8] bg-white/92 p-1.5 shadow-[0_18px_50px_rgba(0,0,0,0.24)] backdrop-blur-md">
         <div className="grid grid-cols-4 items-center gap-1">
           {bottomNavItems.map((item) => {
             const isActive = activeNav === item.id;
@@ -1349,6 +1371,13 @@ function getDailyMealIndex(now: number, count: number) {
   );
 
   return count > 0 ? seed % count : 0;
+}
+
+function formatMenuDate(value: number) {
+  return new Date(value).toLocaleDateString("ru-RU", {
+    day: "numeric",
+    month: "long",
+  });
 }
 
 function getFoodSummary(history: FoodHistoryItem[], period: "today" | "week", now: number) {
