@@ -72,10 +72,26 @@ button:disabled {
   transform: none;
 }
 
-.app-theme-blue { filter: hue-rotate(105deg) saturate(1.08); }
-.app-theme-violet { filter: hue-rotate(190deg) saturate(1.12); }
-.app-theme-graphite { filter: grayscale(1) saturate(.25); }
-.app-theme-light { filter: brightness(1.1) saturate(.75); }
+.app-theme { --theme-dark: #14211b; --theme-primary: #1f3327; --theme-accent: #2c8a72; --theme-soft: #f2f5ee; --theme-pale: #eef2ea; --theme-border: #dfe5d8; --theme-text: #172018; --theme-muted: #59665d; }
+.app-theme-blue { --theme-dark: #10233b; --theme-primary: #163f68; --theme-accent: #287fc1; --theme-soft: #edf4fa; --theme-pale: #e9f2f9; --theme-border: #d3e1ee; --theme-text: #15293d; --theme-muted: #526a80; }
+.app-theme-violet { --theme-dark: #211936; --theme-primary: #3b2a63; --theme-accent: #7953b5; --theme-soft: #f4f0fa; --theme-pale: #eee9f7; --theme-border: #e0d8ed; --theme-text: #251b38; --theme-muted: #685d79; }
+.app-theme-graphite { --theme-dark: #1d2125; --theme-primary: #30363c; --theme-accent: #71808c; --theme-soft: #f0f2f3; --theme-pale: #e9ecee; --theme-border: #d8dde0; --theme-text: #1e2428; --theme-muted: #5e6a72; }
+.app-theme-light { --theme-dark: #edf2ee; --theme-primary: #385044; --theme-accent: #5b8a70; --theme-soft: #ffffff; --theme-pale: #f2f6f3; --theme-border: #d8e1db; --theme-text: #1f2b24; --theme-muted: #617067; }
+
+/* Theme tokens replace color classes without filtering the DOM. This preserves fixed navigation and images. */
+.app-theme [class~="bg-[#14211b]"] { background-color: var(--theme-dark) !important; }
+.app-theme [class~="bg-[#1f3327]"] { background-color: var(--theme-primary) !important; }
+.app-theme [class~="bg-[#2c8a72]"] { background-color: var(--theme-accent) !important; }
+.app-theme [class~="bg-[#f2f5ee]"] { background-color: var(--theme-soft) !important; }
+.app-theme [class~="bg-[#eef2ea]"], .app-theme [class~="bg-[#e7f4ee]"] { background-color: var(--theme-pale) !important; }
+.app-theme [class~="border-[#dfe5d8]"] { border-color: var(--theme-border) !important; }
+.app-theme [class~="text-[#172018]"], .app-theme [class~="text-[#1f3327]"] { color: var(--theme-text) !important; }
+.app-theme [class~="text-[#59665d]"] { color: var(--theme-muted) !important; }
+.app-theme [class~="text-[#2c8a72]"] { color: var(--theme-accent) !important; }
+.app-theme .settings-modal { color: #172018; }
+.app-theme .settings-modal [class~="bg-[#1f3327]"] { background-color: #1f3327 !important; }
+.app-theme .settings-modal [class~="bg-[#eef2ea]"] { background-color: #eef2ea !important; }
+.app-theme .settings-modal [class~="text-[#59665d]"] { color: #59665d !important; }
 
 .theme-choice { color: white; min-height: 3.25rem; }
 .theme-choice-green { background: #1f6b4f; }

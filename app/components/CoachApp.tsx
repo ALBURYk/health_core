@@ -240,12 +240,15 @@ const initialMessages: ChatMessage[] = [
   },
 ];
 
-const bottomNavItems: Array<{ id: NavItemId; label: string }> = [
-  { id: "home", label: "Главная" },
-  { id: "food", label: "Питание" },
-  { id: "history", label: "История" },
-  { id: "chat", label: "Чат" },
-];
+function getNavItems(language: AppLanguage): Array<{ id: NavItemId; label: string }> {
+  const labels = {
+    ru: ["Главная", "Питание", "История", "Чат"],
+    en: ["Home", "Food", "History", "Chat"],
+    kk: ["Басты", "Тамақ", "Тарих", "Чат"],
+  } as const;
+  const [home, food, history, chat] = labels[language];
+  return [{ id: "home", label: home }, { id: "food", label: food }, { id: "history", label: history }, { id: "chat", label: chat }];
+}
 
 export default function CoachApp() {
   const [user, setUser] = useState<AuthUser | null>(null);
@@ -289,6 +292,7 @@ export default function CoachApp() {
   const [restSeconds, setRestSeconds] = useState(30);
   const [isResting, setIsResting] = useState(false);
   const swipeStart = useRef<{ x: number; y: number } | null>(null);
+  const navItems = getNavItems(language);
 
   const plan = useMemo(() => {
     const base = Math.round(10 * weight + 6.25 * height - 120);
@@ -535,8 +539,8 @@ export default function CoachApp() {
       return;
     }
 
-    const currentIndex = bottomNavItems.findIndex((item) => item.id === activeNav);
-    const nextIndex = bottomNavItems.findIndex((item) => item.id === nextNav);
+    const currentIndex = navItems.findIndex((item) => item.id === activeNav);
+    const nextIndex = navItems.findIndex((item) => item.id === nextNav);
 
     setTabDirection(direction ?? (nextIndex > currentIndex ? "next" : "prev"));
     setActiveNav(nextNav);
@@ -572,9 +576,9 @@ export default function CoachApp() {
       return;
     }
 
-    const currentIndex = bottomNavItems.findIndex((item) => item.id === activeNav);
+    const currentIndex = navItems.findIndex((item) => item.id === activeNav);
     const nextIndex = deltaX < 0 ? currentIndex + 1 : currentIndex - 1;
-    const nextItem = bottomNavItems[nextIndex];
+    const nextItem = navItems[nextIndex];
 
     if (nextItem) {
       switchNav(nextItem.id, deltaX < 0 ? "next" : "prev");
@@ -1282,7 +1286,7 @@ export default function CoachApp() {
 
       <nav className="bottom-nav fixed z-50 max-w-lg rounded-[32px] border border-[#dfe5d8] bg-white/92 p-1.5 shadow-[0_18px_50px_rgba(0,0,0,0.24)] backdrop-blur-md">
         <div className="grid grid-cols-4 items-center gap-1">
-          {bottomNavItems.map((item) => {
+          {navItems.map((item) => {
             const isActive = activeNav === item.id;
 
             return (
@@ -1314,14 +1318,15 @@ function readPreferences(): Partial<{ theme: AppTheme; language: AppLanguage; av
 
 function SettingsModal({ theme, language, avatarUrl, voice, onClose, onTheme, onLanguage, onAvatar, onRemoveAvatar, onVoice }: { theme: AppTheme; language: AppLanguage; avatarUrl: string; voice: "Vega" | "Regulus"; onClose: () => void; onTheme: (theme: AppTheme) => void; onLanguage: (language: AppLanguage) => void; onAvatar: (file: File) => void; onRemoveAvatar: () => void; onVoice: (voice: "Vega" | "Regulus") => void }) {
   const themes: Array<{ id: AppTheme; label: string }> = [{ id: "green", label: "Green" }, { id: "blue", label: "Blue" }, { id: "violet", label: "Violet" }, { id: "graphite", label: "Graphite" }, { id: "light", label: "Light" }];
-  return <div className="fixed inset-0 z-[60] grid place-items-end bg-black/45 p-4 sm:place-items-center" role="dialog" aria-modal="true" aria-label="Settings">
+  const copy = language === "en" ? { title: "Settings", photo: "Profile photo", upload: "Upload", remove: "Remove", theme: "Theme", language: "Interface & coach language", voice: "Coach voice" } : language === "kk" ? { title: "Баптаулар", photo: "Профиль суреті", upload: "Жүктеу", remove: "Өшіру", theme: "Тақырып", language: "Интерфейс және жаттықтырушы тілі", voice: "Жаттықтырушы дауысы" } : { title: "Настройки", photo: "Фото профиля", upload: "Загрузить", remove: "Убрать", theme: "Тема", language: "Язык интерфейса и тренера", voice: "Голос тренера" };
+  return <div className="settings-modal fixed inset-0 z-[60] grid place-items-end bg-black/45 p-4 sm:place-items-center" role="dialog" aria-modal="true" aria-label="Settings">
     <section className="w-full max-w-lg rounded-[28px] bg-white p-6 text-[#172018] shadow-2xl">
-      <div className="flex items-center justify-between"><div><p className="text-xs font-black uppercase tracking-[0.2em] text-[#2c8a72]">PulsePilot</p><h2 className="mt-1 text-2xl font-black">Настройки</h2></div><button onClick={onClose} className="grid size-10 place-items-center rounded-full bg-[#eef2ea] text-xl" aria-label="Close">×</button></div>
+      <div className="flex items-center justify-between"><div><p className="text-xs font-black uppercase tracking-[0.2em] text-[#2c8a72]">PulsePilot</p><h2 className="mt-1 text-2xl font-black">{copy.title}</h2></div><button onClick={onClose} className="grid size-10 place-items-center rounded-full bg-[#eef2ea] text-xl" aria-label="Close">×</button></div>
       <div className="mt-6 grid gap-5">
-        <div><p className="text-sm font-black">Фото профиля</p><div className="mt-2 flex items-center gap-3">{avatarUrl ? <img src={avatarUrl} alt="Avatar" className="size-14 rounded-2xl object-cover" /> : <div className="grid size-14 place-items-center rounded-2xl bg-[#1f3327] font-black text-white">AI</div>}<label className="cursor-pointer rounded-xl bg-[#eef2ea] px-3 py-2 text-sm font-black">Загрузить<input type="file" accept="image/*" className="hidden" onChange={(event) => { const file = event.target.files?.[0]; if (file) onAvatar(file); }} /></label>{avatarUrl ? <button onClick={onRemoveAvatar} className="text-sm font-bold text-[#59665d]">Убрать</button> : null}</div></div>
-        <div><p className="text-sm font-black">Тема</p><div className="mt-2 grid grid-cols-5 gap-2">{themes.map((item) => <button key={item.id} onClick={() => onTheme(item.id)} className={`theme-choice theme-choice-${item.id} rounded-xl p-2 text-[10px] font-black ${theme === item.id ? "ring-2 ring-[#2c8a72] ring-offset-2" : ""}`}>{item.label}</button>)}</div></div>
-        <div><p className="text-sm font-black">Язык интерфейса и тренера</p><div className="mt-2 grid grid-cols-3 gap-2">{([{ id: "ru", label: "Русский" }, { id: "en", label: "English" }, { id: "kk", label: "Қазақша" }] as const).map((item) => <button key={item.id} onClick={() => onLanguage(item.id)} className={`rounded-xl px-3 py-2 text-sm font-black ${language === item.id ? "bg-[#1f3327] text-white" : "bg-[#eef2ea] text-[#59665d]"}`}>{item.label}</button>)}</div><p className="mt-2 text-xs font-semibold text-[#59665d]">Ответы AI и голос будут на выбранном языке.</p></div>
-        <div><p className="text-sm font-black">Голос тренера</p><div className="mt-2 flex gap-2">{(["Vega", "Regulus"] as const).map((item) => <button key={item} onClick={() => onVoice(item)} className={`rounded-xl px-4 py-2 text-sm font-black ${voice === item ? "bg-[#1f3327] text-white" : "bg-[#eef2ea] text-[#59665d]"}`}>{item === "Vega" ? "♀ Vega" : "♂ Regulus"}</button>)}</div><p className="mt-2 text-xs font-semibold text-[#59665d]">Используется голос с таким именем, если он доступен в браузере.</p></div>
+        <div><p className="text-sm font-black">{copy.photo}</p><div className="mt-2 flex items-center gap-3">{avatarUrl ? <img src={avatarUrl} alt="Avatar" className="size-14 rounded-2xl object-cover" /> : <div className="grid size-14 place-items-center rounded-2xl bg-[#1f3327] font-black text-white">AI</div>}<label className="cursor-pointer rounded-xl bg-[#eef2ea] px-3 py-2 text-sm font-black">{copy.upload}<input type="file" accept="image/*" className="hidden" onChange={(event) => { const file = event.target.files?.[0]; if (file) onAvatar(file); }} /></label>{avatarUrl ? <button onClick={onRemoveAvatar} className="text-sm font-bold text-[#59665d]">{copy.remove}</button> : null}</div></div>
+        <div><p className="text-sm font-black">{copy.theme}</p><div className="mt-2 grid grid-cols-5 gap-2">{themes.map((item) => <button key={item.id} onClick={() => onTheme(item.id)} className={`theme-choice theme-choice-${item.id} rounded-xl p-2 text-[10px] font-black ${theme === item.id ? "ring-2 ring-[#2c8a72] ring-offset-2" : ""}`}>{item.label}</button>)}</div></div>
+        <div><p className="text-sm font-black">{copy.language}</p><div className="mt-2 grid grid-cols-3 gap-2">{([{ id: "ru", label: "Русский" }, { id: "en", label: "English" }, { id: "kk", label: "Қазақша" }] as const).map((item) => <button key={item.id} onClick={() => onLanguage(item.id)} className={`rounded-xl px-3 py-2 text-sm font-black ${language === item.id ? "bg-[#1f3327] text-white" : "bg-[#eef2ea] text-[#59665d]"}`}>{item.label}</button>)}</div></div>
+        <div><p className="text-sm font-black">{copy.voice}</p><div className="mt-2 flex gap-2">{(["Vega", "Regulus"] as const).map((item) => <button key={item} onClick={() => onVoice(item)} className={`rounded-xl px-4 py-2 text-sm font-black ${voice === item ? "bg-[#1f3327] text-white" : "bg-[#eef2ea] text-[#59665d]"}`}>{item === "Vega" ? "♀ Vega" : "♂ Regulus"}</button>)}</div><p className="mt-2 text-xs font-semibold text-[#59665d]">Vega/Regulus work only when that voice is installed on this device.</p></div>
       </div>
     </section>
   </div>;
