@@ -5,6 +5,8 @@ import { useEffect, useMemo, useRef, useState, type TouchEvent } from "react";
 type Goal = "lose" | "gain" | "fit";
 type Difficulty = "easy" | "medium" | "hard";
 type NavItemId = "home" | "food" | "history" | "chat";
+type AppTheme = "green" | "blue" | "violet" | "graphite" | "light";
+type AppLanguage = "ru" | "en" | "kk";
 
 type ChatMessage = {
   role: "user" | "model";
@@ -20,6 +22,7 @@ type ScanResult = {
   protein: number;
   carbs: number;
   fat: number;
+  vitamins?: string[];
   portion: string;
   advice: string;
 };
@@ -276,6 +279,15 @@ export default function CoachApp() {
   const [foodHistory, setFoodHistory] = useState<FoodHistoryItem[]>([]);
   const [activeNav, setActiveNav] = useState<NavItemId>("home");
   const [tabDirection, setTabDirection] = useState<"next" | "prev">("next");
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [theme, setTheme] = useState<AppTheme>(() => readPreferences().theme ?? "green");
+  const [language, setLanguage] = useState<AppLanguage>(() => readPreferences().language ?? "ru");
+  const [avatarUrl, setAvatarUrl] = useState(() => readPreferences().avatarUrl ?? "");
+  const [voice, setVoice] = useState<"Vega" | "Regulus">(() => readPreferences().voice ?? "Vega");
+  const [isWorkoutSessionOpen, setIsWorkoutSessionOpen] = useState(false);
+  const [workoutStep, setWorkoutStep] = useState(0);
+  const [restSeconds, setRestSeconds] = useState(30);
+  const [isResting, setIsResting] = useState(false);
   const swipeStart = useRef<{ x: number; y: number } | null>(null);
 
   const plan = useMemo(() => {
@@ -308,6 +320,19 @@ export default function CoachApp() {
   useEffect(() => {
     loadSession();
   }, []);
+
+  useEffect(() => {
+    window.localStorage.setItem("pulsepilot-preferences", JSON.stringify({ theme, language, avatarUrl, voice }));
+  }, [theme, language, avatarUrl, voice]);
+
+  useEffect(() => {
+    if (!isResting) return;
+    const id = window.setInterval(() => setRestSeconds((value) => {
+      if (value <= 1) { window.clearInterval(id); setIsResting(false); return 30; }
+      return value - 1;
+    }), 1000);
+    return () => window.clearInterval(id);
+  }, [isResting]);
 
   useEffect(() => {
     const timerId = window.setInterval(() => {
@@ -459,6 +484,42 @@ export default function CoachApp() {
     setIsFinishConfirming(false);
   }
 
+  function beginWorkoutSession() {
+    setWorkoutStep(0);
+    setRestSeconds(30);
+    setIsResting(false);
+    setIsWorkoutSessionOpen(true);
+    startTrainingTimer();
+    speakCoach(`${workoutMoves[0].name}. ${workoutMoves[0].base} ${workoutMoves[0].unit}.`);
+  }
+
+  function nextWorkoutStep() {
+    if (workoutStep >= workoutMoves.length - 1) {
+      setIsWorkoutSessionOpen(false);
+      return;
+    }
+    setWorkoutStep((step) => step + 1);
+    setRestSeconds(30);
+    setIsResting(true);
+  }
+
+  function speakCoach(text: string) {
+    if (!("speechSynthesis" in window)) return;
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = language === "kk" ? "kk-KZ" : language === "en" ? "en-US" : "ru-RU";
+    const voices = window.speechSynthesis.getVoices();
+    utterance.voice = voices.find((item) => new RegExp(voice, "i").test(item.name)) ?? voices.find((item) => item.lang.startsWith(utterance.lang.slice(0, 2))) ?? null;
+    window.speechSynthesis.speak(utterance);
+  }
+
+  function saveAvatar(file: File) {
+    if (!file.type.startsWith("image/")) return;
+    const reader = new FileReader();
+    reader.onload = () => setAvatarUrl(typeof reader.result === "string" ? reader.result : "");
+    reader.readAsDataURL(file);
+  }
+
   function pauseTrainingTimer() {
     setIsTimerRunning(false);
   }
@@ -569,6 +630,7 @@ export default function CoachApp() {
             calories: plan.calories,
             protein: plan.protein,
             burned: plan.burned,
+            language,
           },
         }),
       });
@@ -709,7 +771,7 @@ export default function CoachApp() {
   }
 
   return (
-    <main className="min-h-screen overflow-x-hidden bg-[#14211b] pb-28 text-[#172018]">
+    <main className={`app-theme app-theme-${theme} min-h-screen overflow-x-hidden bg-[#14211b] pb-28 text-[#172018]`}>
       <div
         key={activeNav}
         onTouchStart={handleTouchStart}
@@ -720,7 +782,7 @@ export default function CoachApp() {
       >
         <aside className={`${activeNav === "home" ? "block" : "hidden"} rounded-lg border border-[#dfe5d8] bg-white p-5 shadow-sm`}>
           <div className="flex items-center gap-3">
-            <div className="grid size-11 place-items-center rounded-lg bg-[#1f3327] font-black text-white">AI</div>
+            {avatarUrl ? <img src={avatarUrl} alt="Profile" className="size-11 rounded-lg object-cover" /> : <div className="grid size-11 place-items-center rounded-lg bg-[#1f3327] font-black text-white">AI</div>}
             <div>
               <p className="text-xs font-bold uppercase text-[#2c8a72]">AI Fitness</p>
               <h1 className="text-2xl font-black">Будьте Здоровы</h1>
@@ -731,6 +793,7 @@ export default function CoachApp() {
             <p className="text-xs font-bold text-[#59665d]">Аккаунт</p>
             <div className="mt-1 flex items-center justify-between gap-3">
               <p className="min-w-0 truncate text-lg font-black">{user.login}</p>
+              <button onClick={() => setIsSettingsOpen(true)} className="rounded-md bg-white px-2 py-1 text-xs font-black text-[#1f3327]" aria-label="Settings">⚙</button>
               <button onClick={logout} className="rounded-md bg-white px-2 py-1 text-xs font-black text-[#1f3327]">
                 Выйти
               </button>
@@ -902,7 +965,7 @@ export default function CoachApp() {
                   <h3 className="mt-1 text-2xl font-black">Быстрый старт</h3>
                 </div>
                 <button
-                  onClick={() => setIsWorkoutOpen((isOpen) => !isOpen)}
+                  onClick={beginWorkoutSession}
                   className="rounded-lg bg-[#1f3327] px-4 py-3 text-sm font-black text-white transition hover:bg-[#2c8a72]"
                 >
                   {isWorkoutOpen ? "Скрыть" : "Начать заниматься"}
@@ -1024,6 +1087,7 @@ export default function CoachApp() {
                         <MiniStat label="Ж" value={scanResult.fat} />
                       </div>
 
+                      {scanResult.vitamins?.length ? <p className="mt-3 rounded-lg bg-[#eef2ea] p-3 text-sm font-bold text-[#1f3327]">Vitamins: {scanResult.vitamins.join(" · ")}</p> : null}
                       <p className="mt-4 rounded-lg bg-[#f2f5ee] p-3 text-sm font-semibold leading-6">
                         {scanResult.advice}
                       </p>
@@ -1159,6 +1223,9 @@ export default function CoachApp() {
               <div className="mb-4 flex items-center gap-2">
                 <span className="rounded-md bg-[#e7f4ee] px-2 py-1 text-sm font-black text-[#2c8a72]">AI</span>
                 <h3 className="text-xl font-black">AI Тренер</h3>
+                <div className="ml-auto flex gap-1">
+                  {(["Vega", "Regulus"] as const).map((item) => <button key={item} onClick={() => setVoice(item)} className={`rounded-md px-2 py-1 text-xs font-black ${voice === item ? "bg-[#1f3327] text-white" : "bg-[#eef2ea] text-[#59665d]"}`}>{item === "Vega" ? "♀ Vega" : "♂ Regulus"}</button>)}
+                </div>
               </div>
 
               <div className="flex max-h-80 min-h-48 flex-col gap-3 overflow-y-auto rounded-lg bg-[#e7f4ee] p-4 text-sm font-semibold leading-6 text-[#1f3327]">
@@ -1210,6 +1277,9 @@ export default function CoachApp() {
         </section>
       </div>
 
+      {isSettingsOpen ? <SettingsModal theme={theme} language={language} avatarUrl={avatarUrl} voice={voice} onClose={() => setIsSettingsOpen(false)} onTheme={setTheme} onLanguage={setLanguage} onAvatar={saveAvatar} onRemoveAvatar={() => setAvatarUrl("")} onVoice={setVoice} /> : null}
+      {isWorkoutSessionOpen ? <WorkoutSession move={workoutMoves[workoutStep]} index={workoutStep} total={workoutMoves.length} isResting={isResting} restSeconds={restSeconds} timerSeconds={timerSeconds} onPause={pauseTrainingTimer} onStop={() => { setIsWorkoutSessionOpen(false); pauseTrainingTimer(); }} onNext={nextWorkoutStep} onSpeak={() => speakCoach(isResting ? `Отдых ${restSeconds} секунд` : `${workoutMoves[workoutStep].name}. ${workoutMoves[workoutStep].base} ${workoutMoves[workoutStep].unit}`)} /> : null}
+
       <nav className="bottom-nav fixed z-50 max-w-lg rounded-[32px] border border-[#dfe5d8] bg-white/92 p-1.5 shadow-[0_18px_50px_rgba(0,0,0,0.24)] backdrop-blur-md">
         <div className="grid grid-cols-4 items-center gap-1">
           {bottomNavItems.map((item) => {
@@ -1235,6 +1305,30 @@ export default function CoachApp() {
       </nav>
     </main>
   );
+}
+
+function readPreferences(): Partial<{ theme: AppTheme; language: AppLanguage; avatarUrl: string; voice: "Vega" | "Regulus" }> {
+  if (typeof window === "undefined") return {};
+  try { return JSON.parse(window.localStorage.getItem("pulsepilot-preferences") || "{}"); } catch { return {}; }
+}
+
+function SettingsModal({ theme, language, avatarUrl, voice, onClose, onTheme, onLanguage, onAvatar, onRemoveAvatar, onVoice }: { theme: AppTheme; language: AppLanguage; avatarUrl: string; voice: "Vega" | "Regulus"; onClose: () => void; onTheme: (theme: AppTheme) => void; onLanguage: (language: AppLanguage) => void; onAvatar: (file: File) => void; onRemoveAvatar: () => void; onVoice: (voice: "Vega" | "Regulus") => void }) {
+  const themes: Array<{ id: AppTheme; label: string }> = [{ id: "green", label: "Green" }, { id: "blue", label: "Blue" }, { id: "violet", label: "Violet" }, { id: "graphite", label: "Graphite" }, { id: "light", label: "Light" }];
+  return <div className="fixed inset-0 z-[60] grid place-items-end bg-black/45 p-4 sm:place-items-center" role="dialog" aria-modal="true" aria-label="Settings">
+    <section className="w-full max-w-lg rounded-[28px] bg-white p-6 text-[#172018] shadow-2xl">
+      <div className="flex items-center justify-between"><div><p className="text-xs font-black uppercase tracking-[0.2em] text-[#2c8a72]">PulsePilot</p><h2 className="mt-1 text-2xl font-black">Настройки</h2></div><button onClick={onClose} className="grid size-10 place-items-center rounded-full bg-[#eef2ea] text-xl" aria-label="Close">×</button></div>
+      <div className="mt-6 grid gap-5">
+        <div><p className="text-sm font-black">Фото профиля</p><div className="mt-2 flex items-center gap-3">{avatarUrl ? <img src={avatarUrl} alt="Avatar" className="size-14 rounded-2xl object-cover" /> : <div className="grid size-14 place-items-center rounded-2xl bg-[#1f3327] font-black text-white">AI</div>}<label className="cursor-pointer rounded-xl bg-[#eef2ea] px-3 py-2 text-sm font-black">Загрузить<input type="file" accept="image/*" className="hidden" onChange={(event) => { const file = event.target.files?.[0]; if (file) onAvatar(file); }} /></label>{avatarUrl ? <button onClick={onRemoveAvatar} className="text-sm font-bold text-[#59665d]">Убрать</button> : null}</div></div>
+        <div><p className="text-sm font-black">Тема</p><div className="mt-2 grid grid-cols-5 gap-2">{themes.map((item) => <button key={item.id} onClick={() => onTheme(item.id)} className={`theme-choice theme-choice-${item.id} rounded-xl p-2 text-[10px] font-black ${theme === item.id ? "ring-2 ring-[#2c8a72] ring-offset-2" : ""}`}>{item.label}</button>)}</div></div>
+        <div><p className="text-sm font-black">Язык интерфейса и тренера</p><div className="mt-2 grid grid-cols-3 gap-2">{([{ id: "ru", label: "Русский" }, { id: "en", label: "English" }, { id: "kk", label: "Қазақша" }] as const).map((item) => <button key={item.id} onClick={() => onLanguage(item.id)} className={`rounded-xl px-3 py-2 text-sm font-black ${language === item.id ? "bg-[#1f3327] text-white" : "bg-[#eef2ea] text-[#59665d]"}`}>{item.label}</button>)}</div><p className="mt-2 text-xs font-semibold text-[#59665d]">Ответы AI и голос будут на выбранном языке.</p></div>
+        <div><p className="text-sm font-black">Голос тренера</p><div className="mt-2 flex gap-2">{(["Vega", "Regulus"] as const).map((item) => <button key={item} onClick={() => onVoice(item)} className={`rounded-xl px-4 py-2 text-sm font-black ${voice === item ? "bg-[#1f3327] text-white" : "bg-[#eef2ea] text-[#59665d]"}`}>{item === "Vega" ? "♀ Vega" : "♂ Regulus"}</button>)}</div><p className="mt-2 text-xs font-semibold text-[#59665d]">Используется голос с таким именем, если он доступен в браузере.</p></div>
+      </div>
+    </section>
+  </div>;
+}
+
+function WorkoutSession({ move, index, total, isResting, restSeconds, timerSeconds, onPause, onStop, onNext, onSpeak }: { move: WorkoutMove; index: number; total: number; isResting: boolean; restSeconds: number; timerSeconds: number; onPause: () => void; onStop: () => void; onNext: () => void; onSpeak: () => void }) {
+  return <div className="fixed inset-0 z-[70] grid place-items-center bg-[#14211b]/95 p-5 text-white"><section className="w-full max-w-md text-center"><p className="text-sm font-black uppercase tracking-[0.2em] text-[#9edcb9]">Таймер · {formatTime(timerSeconds)}</p><div className={`coach-orb mx-auto mt-8 grid size-56 place-items-center rounded-full border border-white/25 bg-gradient-to-br from-[#2c8a72] to-[#0e2019] shadow-[0_0_100px_rgba(44,138,114,.35)] ${isResting ? "coach-orb-speaking" : ""}`}><div className="max-w-44"><p className="text-sm font-bold text-white/70">{isResting ? "Пауза" : `Упражнение ${index + 1} из ${total}`}</p><h2 className="mt-2 text-2xl font-black">{isResting ? `${restSeconds} сек` : move.name}</h2><p className="mt-2 text-sm font-bold">{isResting ? "Восстановите дыхание" : `${move.base} ${move.unit} · ${move.seconds} сек`}</p></div></div><p className="mx-auto mt-8 max-w-sm text-sm font-semibold leading-6 text-white/70">{isResting ? "Следующее упражнение начнётся после короткой паузы." : "Работайте в своём темпе. Остановитесь, если появилась боль или головокружение."}</p><div className="mt-7 grid grid-cols-3 gap-2"><button onClick={onSpeak} className="rounded-xl bg-white/15 px-3 py-3 text-sm font-black">◉ Голос</button><button onClick={onPause} className="rounded-xl bg-white/15 px-3 py-3 text-sm font-black">Пауза</button><button onClick={isResting ? undefined : onNext} disabled={isResting} className="rounded-xl bg-[#2c8a72] px-3 py-3 text-sm font-black disabled:opacity-50">{index === total - 1 ? "Готово" : "Далее"}</button></div><button onClick={onStop} className="mt-4 text-sm font-bold text-white/60">Завершить принудительно</button></section></div>;
 }
 
 function NavIcon({ id, active }: { id: NavItemId; active: boolean }) {

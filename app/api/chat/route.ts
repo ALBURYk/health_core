@@ -13,6 +13,7 @@ type CoachContext = {
   calories?: number;
   protein?: number;
   burned?: number;
+  language?: "ru" | "en" | "kk";
 };
 
 type GeminiPart = {
@@ -141,6 +142,7 @@ function buildCoachSettings(context: CoachContext = {}) {
   const calories = toNumber(context.calories);
   const protein = toNumber(context.protein);
   const burned = toNumber(context.burned);
+  const language = context.language === "en" ? "English" : context.language === "kk" ? "Kazakh" : "Russian";
 
   return [
     "Ты персональный AI fitness coach внутри приложения PulsePilot.",
@@ -153,6 +155,7 @@ function buildCoachSettings(context: CoachContext = {}) {
     "Не используй markdown-таблицы. Отвечай компактно: 1-4 коротких абзаца или небольшой список.",
     `Текущий профиль: цель - ${goal}, вес - ${weight || "не указан"} кг, рост - ${height || "не указан"} см, тренировка - ${minutes || "не указано"} мин.`,
     `План приложения на день: ${calories || "не рассчитано"} ккал, ${protein || "не рассчитано"} г белка, примерно ${burned || "не рассчитано"} ккал активности.`,
+    `Important: reply only in ${language}; use the same language for all coaching advice.`,
   ].join("\n");
 }
 

@@ -52,7 +52,7 @@ export async function POST(request: Request) {
     "Если еда есть, оцени калории и КБЖУ приблизительно, но честно снижай confidence и ставь needsReview=true при плохом освещении, частично закрытой тарелке или неоднозначном блюде.",
     `Цель пользователя: ${goal}.`,
     "Верни только валидный JSON без markdown:",
-    '{"isFood":boolean,"needsReview":boolean,"foodName":"string","confidence":"низкая|средняя|высокая","calories":number,"protein":number,"carbs":number,"fat":number,"portion":"string","advice":"string"}',
+    '{"isFood":boolean,"needsReview":boolean,"foodName":"string","confidence":"низкая|средняя|высокая","calories":number,"protein":number,"carbs":number,"fat":number,"vitamins":["Vitamin C"],"portion":"string","advice":"string"}',
   ].join(" ");
 
   const response = await fetch(
@@ -136,6 +136,7 @@ function parseGeminiJson(text: string) {
       protein: isFood ? toNumber(parsed.protein) : 0,
       carbs: isFood ? toNumber(parsed.carbs) : 0,
       fat: isFood ? toNumber(parsed.fat) : 0,
+      vitamins: isFood && Array.isArray(parsed.vitamins) ? parsed.vitamins.filter((value: unknown): value is string => typeof value === "string").slice(0, 6) : [],
       portion: String(parsed.portion || (isFood ? "Порция не определена" : "Еда не определена")),
       advice: String(
         parsed.advice ||

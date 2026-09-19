@@ -72,6 +72,24 @@ button:disabled {
   transform: none;
 }
 
+.app-theme-blue { filter: hue-rotate(105deg) saturate(1.08); }
+.app-theme-violet { filter: hue-rotate(190deg) saturate(1.12); }
+.app-theme-graphite { filter: grayscale(1) saturate(.25); }
+.app-theme-light { filter: brightness(1.1) saturate(.75); }
+
+.theme-choice { color: white; min-height: 3.25rem; }
+.theme-choice-green { background: #1f6b4f; }
+.theme-choice-blue { background: #1768a6; }
+.theme-choice-violet { background: #6845a5; }
+.theme-choice-graphite { background: #31373a; }
+.theme-choice-light { background: #cbd4cf; color: #172018; }
+
+.coach-orb { animation: coach-breathe 3.2s ease-in-out infinite; }
+.coach-orb-speaking { animation: coach-speak .75s ease-in-out infinite alternate; }
+
+@keyframes coach-breathe { 50% { transform: scale(1.045); box-shadow: 0 0 125px rgba(44, 138, 114, .48); } }
+@keyframes coach-speak { to { transform: scale(1.09); filter: brightness(1.2); } }
+
 .tab-panel {
   max-width: 100vw;
   touch-action: pan-y;
