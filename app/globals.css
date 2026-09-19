@@ -72,11 +72,11 @@ button:disabled {
   transform: none;
 }
 
-.app-theme { --theme-dark: #14211b; --theme-primary: #1f3327; --theme-accent: #2c8a72; --theme-soft: #f2f5ee; --theme-pale: #eef2ea; --theme-border: #dfe5d8; --theme-text: #172018; --theme-muted: #59665d; }
-.app-theme-blue { --theme-dark: #10233b; --theme-primary: #163f68; --theme-accent: #287fc1; --theme-soft: #edf4fa; --theme-pale: #e9f2f9; --theme-border: #d3e1ee; --theme-text: #15293d; --theme-muted: #526a80; }
-.app-theme-violet { --theme-dark: #211936; --theme-primary: #3b2a63; --theme-accent: #7953b5; --theme-soft: #f4f0fa; --theme-pale: #eee9f7; --theme-border: #e0d8ed; --theme-text: #251b38; --theme-muted: #685d79; }
-.app-theme-graphite { --theme-dark: #1d2125; --theme-primary: #30363c; --theme-accent: #71808c; --theme-soft: #f0f2f3; --theme-pale: #e9ecee; --theme-border: #d8dde0; --theme-text: #1e2428; --theme-muted: #5e6a72; }
-.app-theme-light { --theme-dark: #edf2ee; --theme-primary: #385044; --theme-accent: #5b8a70; --theme-soft: #ffffff; --theme-pale: #f2f6f3; --theme-border: #d8e1db; --theme-text: #1f2b24; --theme-muted: #617067; }
+.app-theme { --theme-dark: #14211b; --theme-primary: #1f3327; --theme-accent: #2c8a72; --theme-soft: #f2f5ee; --theme-pale: #eef2ea; --theme-border: #dfe5d8; --theme-text: #172018; --theme-muted: #59665d; --nav-icon: #1f3327; --nav-icon-active: #ffffff; }
+.app-theme-blue { --theme-dark: #10233b; --theme-primary: #163f68; --theme-accent: #287fc1; --theme-soft: #edf4fa; --theme-pale: #e9f2f9; --theme-border: #d3e1ee; --theme-text: #15293d; --theme-muted: #526a80; --nav-icon: #1e6098; }
+.app-theme-violet { --theme-dark: #211936; --theme-primary: #3b2a63; --theme-accent: #7953b5; --theme-soft: #f4f0fa; --theme-pale: #eee9f7; --theme-border: #e0d8ed; --theme-text: #251b38; --theme-muted: #685d79; --nav-icon: #65469d; }
+.app-theme-graphite { --theme-dark: #1d2125; --theme-primary: #30363c; --theme-accent: #71808c; --theme-soft: #f0f2f3; --theme-pale: #e9ecee; --theme-border: #d8dde0; --theme-text: #1e2428; --theme-muted: #5e6a72; --nav-icon: #46515a; }
+.app-theme-light { --theme-dark: #eadcc5; --theme-primary: #72583f; --theme-accent: #a67b4e; --theme-soft: #fffaf2; --theme-pale: #f7ecdd; --theme-border: #dfcdb7; --theme-text: #382a1f; --theme-muted: #756454; --nav-icon: #795b3e; --nav-icon-active: #fffaf2; }
 
 /* Theme tokens replace color classes without filtering the DOM. This preserves fixed navigation and images. */
 .app-theme [class~="bg-[#14211b]"] { background-color: var(--theme-dark) !important; }
@@ -92,6 +92,8 @@ button:disabled {
 .app-theme .settings-modal [class~="bg-[#1f3327]"] { background-color: #1f3327 !important; }
 .app-theme .settings-modal [class~="bg-[#eef2ea]"] { background-color: #eef2ea !important; }
 .app-theme .settings-modal [class~="text-[#59665d]"] { color: #59665d !important; }
+.app-theme-light .bottom-nav { background-color: #fff7eb !important; border-color: #dfcdb7 !important; }
+.app-theme-light .bottom-nav [class~="bg-[#1f3327]"] { background-color: #72583f !important; }
 
 .theme-choice { color: white; min-height: 3.25rem; }
 .theme-choice-green { background: #1f6b4f; }

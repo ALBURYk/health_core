@@ -1337,7 +1337,7 @@ function WorkoutSession({ move, index, total, isResting, restSeconds, timerSecon
 }
 
 function NavIcon({ id, active }: { id: NavItemId; active: boolean }) {
-  const color = active ? "#ffffff" : "#1f3327";
+  const color = active ? "var(--nav-icon-active, #ffffff)" : "var(--nav-icon, #1f3327)";
   const commonProps = {
     width: 28,
     height: 28,
