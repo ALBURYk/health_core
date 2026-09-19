@@ -78,6 +78,9 @@ button:disabled {
 .app-theme-graphite { --theme-dark: #1d2125; --theme-primary: #30363c; --theme-accent: #71808c; --theme-soft: #f0f2f3; --theme-pale: #e9ecee; --theme-border: #d8dde0; --theme-text: #1e2428; --theme-muted: #5e6a72; --nav-icon: #46515a; }
 .app-theme-light { --theme-dark: #eadcc5; --theme-primary: #72583f; --theme-accent: #a67b4e; --theme-soft: #fffaf2; --theme-pale: #f7ecdd; --theme-border: #dfcdb7; --theme-text: #382a1f; --theme-muted: #756454; --nav-icon: #795b3e; --nav-icon-active: #fffaf2; }
 
+/* The app shell is the background visible between every card. */
+main.app-theme { background-color: var(--theme-dark) !important; }
+
 /* Theme tokens replace color classes without filtering the DOM. This preserves fixed navigation and images. */
 .app-theme [class~="bg-[#14211b]"] { background-color: var(--theme-dark) !important; }
 .app-theme [class~="bg-[#1f3327]"] { background-color: var(--theme-primary) !important; }
