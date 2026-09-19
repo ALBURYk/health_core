@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "PulsePilot — AI Fitness Coach",
-  description: "AI fitness and nutrition coach for workouts, calories, meals, and recommendations.",
+  title: "Health Core — AI Fitness Coach",
+  description: "Health Core: AI fitness and nutrition coach for workouts, calories, meals, and recommendations.",
 };
 
 export default function RootLayout({

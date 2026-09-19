@@ -697,7 +697,7 @@ export default function CoachApp() {
           <div className="flex items-center gap-3">
             <div className="grid size-11 place-items-center rounded-lg bg-[#1f3327] font-black text-white">AI</div>
             <div>
-              <p className="text-xs font-bold uppercase text-[#2c8a72]">AI Fitness</p>
+              <p className="text-xs font-bold uppercase text-[#2c8a72]">Health Core</p>
               <h1 className="text-2xl font-black">Будьте Здоровы</h1>
             </div>
           </div>
@@ -788,7 +788,7 @@ export default function CoachApp() {
           <div className="flex items-center gap-3">
             {avatarUrl ? <img src={avatarUrl} alt="Profile" className="size-11 rounded-lg object-cover" /> : <div className="grid size-11 place-items-center rounded-lg bg-[#1f3327] font-black text-white">AI</div>}
             <div>
-              <p className="text-xs font-bold uppercase text-[#2c8a72]">AI Fitness</p>
+              <p className="text-xs font-bold uppercase text-[#2c8a72]">Health Core</p>
               <h1 className="text-2xl font-black">Будьте Здоровы</h1>
             </div>
           </div>
@@ -1321,7 +1321,7 @@ function SettingsModal({ theme, language, avatarUrl, voice, onClose, onTheme, on
   const copy = language === "en" ? { title: "Settings", photo: "Profile photo", upload: "Upload", remove: "Remove", theme: "Theme", language: "Interface & coach language", voice: "Coach voice" } : language === "kk" ? { title: "Баптаулар", photo: "Профиль суреті", upload: "Жүктеу", remove: "Өшіру", theme: "Тақырып", language: "Интерфейс және жаттықтырушы тілі", voice: "Жаттықтырушы дауысы" } : { title: "Настройки", photo: "Фото профиля", upload: "Загрузить", remove: "Убрать", theme: "Тема", language: "Язык интерфейса и тренера", voice: "Голос тренера" };
   return <div className="settings-modal fixed inset-0 z-[60] grid place-items-end bg-black/45 p-4 sm:place-items-center" role="dialog" aria-modal="true" aria-label="Settings">
     <section className="w-full max-w-lg rounded-[28px] bg-white p-6 text-[#172018] shadow-2xl">
-      <div className="flex items-center justify-between"><div><p className="text-xs font-black uppercase tracking-[0.2em] text-[#2c8a72]">PulsePilot</p><h2 className="mt-1 text-2xl font-black">{copy.title}</h2></div><button onClick={onClose} className="grid size-10 place-items-center rounded-full bg-[#eef2ea] text-xl" aria-label="Close">×</button></div>
+      <div className="flex items-center justify-between"><div><p className="text-xs font-black uppercase tracking-[0.2em] text-[#2c8a72]">Health Core</p><h2 className="mt-1 text-2xl font-black">{copy.title}</h2></div><button onClick={onClose} className="grid size-10 place-items-center rounded-full bg-[#eef2ea] text-xl" aria-label="Close">×</button></div>
       <div className="mt-6 grid gap-5">
         <div><p className="text-sm font-black">{copy.photo}</p><div className="mt-2 flex items-center gap-3">{avatarUrl ? <img src={avatarUrl} alt="Avatar" className="size-14 rounded-2xl object-cover" /> : <div className="grid size-14 place-items-center rounded-2xl bg-[#1f3327] font-black text-white">AI</div>}<label className="cursor-pointer rounded-xl bg-[#eef2ea] px-3 py-2 text-sm font-black">{copy.upload}<input type="file" accept="image/*" className="hidden" onChange={(event) => { const file = event.target.files?.[0]; if (file) onAvatar(file); }} /></label>{avatarUrl ? <button onClick={onRemoveAvatar} className="text-sm font-bold text-[#59665d]">{copy.remove}</button> : null}</div></div>
         <div><p className="text-sm font-black">{copy.theme}</p><div className="mt-2 grid grid-cols-5 gap-2">{themes.map((item) => <button key={item.id} onClick={() => onTheme(item.id)} className={`theme-choice theme-choice-${item.id} rounded-xl p-2 text-[10px] font-black ${theme === item.id ? "ring-2 ring-[#2c8a72] ring-offset-2" : ""}`}>{item.label}</button>)}</div></div>
