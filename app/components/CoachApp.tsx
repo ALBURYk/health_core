@@ -524,6 +524,16 @@ export default function CoachApp() {
     reader.readAsDataURL(file);
   }
 
+  function changeLanguage(nextLanguage: AppLanguage) {
+    setLanguage(nextLanguage);
+    setQuestion("");
+    setChatError("");
+    setMessages([{
+      role: "model",
+      text: nextLanguage === "en" ? "Hello! I am your Health Core coach. How can I help with your training today?" : nextLanguage === "kk" ? "Сәлем! Мен сіздің Health Core жаттықтырушыңызбын. Бүгінгі жаттығуыңызға қалай көмектесе аламын?" : "Привет! Я ваш тренер Health Core. Чем помочь с тренировкой сегодня?",
+    }]);
+  }
+
   function pauseTrainingTimer() {
     setIsTimerRunning(false);
   }
@@ -1281,7 +1291,7 @@ export default function CoachApp() {
         </section>
       </div>
 
-      {isSettingsOpen ? <SettingsModal theme={theme} language={language} avatarUrl={avatarUrl} voice={voice} onClose={() => setIsSettingsOpen(false)} onTheme={setTheme} onLanguage={setLanguage} onAvatar={saveAvatar} onRemoveAvatar={() => setAvatarUrl("")} onVoice={setVoice} /> : null}
+      {isSettingsOpen ? <SettingsModal theme={theme} language={language} avatarUrl={avatarUrl} voice={voice} onClose={() => setIsSettingsOpen(false)} onTheme={setTheme} onLanguage={changeLanguage} onAvatar={saveAvatar} onRemoveAvatar={() => setAvatarUrl("")} onVoice={setVoice} /> : null}
       {isWorkoutSessionOpen ? <WorkoutSession move={workoutMoves[workoutStep]} index={workoutStep} total={workoutMoves.length} isResting={isResting} restSeconds={restSeconds} timerSeconds={timerSeconds} onPause={pauseTrainingTimer} onStop={() => { setIsWorkoutSessionOpen(false); pauseTrainingTimer(); }} onNext={nextWorkoutStep} onSpeak={() => speakCoach(isResting ? `Отдых ${restSeconds} секунд` : `${workoutMoves[workoutStep].name}. ${workoutMoves[workoutStep].base} ${workoutMoves[workoutStep].unit}`)} /> : null}
 
       <nav className="bottom-nav fixed z-50 max-w-lg rounded-[32px] border border-[#dfe5d8] bg-white/92 p-1.5 shadow-[0_18px_50px_rgba(0,0,0,0.24)] backdrop-blur-md">
