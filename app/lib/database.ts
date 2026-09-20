@@ -302,7 +302,7 @@ export async function getLeaders(): Promise<Leader[]> {
         streakDays: user.stats.streakDays,
       }))
       .sort((first, second) => second.minutes - first.minutes || second.days - first.days || second.streakDays - first.streakDays)
-      .slice(0, 20);
+      .slice(0, 15);
 
     await Promise.all(changedUsers.map((user) => patchSupabaseUserStats(user.id, user.stats)));
 
@@ -322,7 +322,7 @@ export async function getLeaders(): Promise<Leader[]> {
         streakDays: user.stats.streakDays,
       }))
       .sort((first, second) => second.minutes - first.minutes || second.days - first.days || second.streakDays - first.streakDays)
-      .slice(0, 20);
+      .slice(0, 15);
   });
 }
 

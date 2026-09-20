@@ -250,6 +250,39 @@ function getNavItems(language: AppLanguage): Array<{ id: NavItemId; label: strin
   return [{ id: "home", label: home }, { id: "food", label: food }, { id: "history", label: history }, { id: "chat", label: chat }];
 }
 
+const appCopy = {
+  ru: {
+    account: "Аккаунт", logout: "Выйти", weight: "Вес", height: "Рост", workout: "Тренировка", timer: "Счётчик", start: "Старт", pause: "Пауза", reset: "Сброс", finish: "Закончил", leaders: "Лидеры", plan: "Твой персональный план", headline: "Тренировки, питание и AI-советы", calories: "Калории", protein: "Белок", advice: "Совет под цель", homeWorkout: "Домашняя тренировка", quickStart: "Быстрый старт", startTraining: "Начать заниматься", scanner: "Сканер еды", scanTitle: "Покажи еду AI", food: "Питание", scanHistory: "История сканов", recentMeals: "Последние блюда", dailyMenu: "Меню на день", coach: "AI Тренер", askCoach: "Спроси AI Coach", loading: "Загрузка...",
+  },
+  en: {
+    account: "Account", logout: "Log out", weight: "Weight", height: "Height", workout: "Workout", timer: "Timer", start: "Start", pause: "Pause", reset: "Reset", finish: "Finish", leaders: "Leaders", plan: "Your personal plan", headline: "Training, nutrition & AI advice", calories: "Calories", protein: "Protein", advice: "Goal-based advice", homeWorkout: "Home workout", quickStart: "Quick start", startTraining: "Start training", scanner: "Food scanner", scanTitle: "Show AI your meal", food: "Food", scanHistory: "Scan history", recentMeals: "Recent meals", dailyMenu: "Daily menu", coach: "AI Coach", askCoach: "Ask AI Coach", loading: "Loading...",
+  },
+  kk: {
+    account: "Аккаунт", logout: "Шығу", weight: "Салмақ", height: "Бой", workout: "Жаттығу", timer: "Таймер", start: "Бастау", pause: "Үзіліс", reset: "Қалпына келтіру", finish: "Аяқтау", leaders: "Көшбасшылар", plan: "Жеке жоспарыңыз", headline: "Жаттығу, тамақтану және AI кеңестері", calories: "Калория", protein: "Ақуыз", advice: "Мақсатқа сай кеңес", homeWorkout: "Үй жаттығуы", quickStart: "Жылдам бастау", startTraining: "Жаттығуды бастау", scanner: "Тағам сканері", scanTitle: "Тағамды AI-ға көрсетіңіз", food: "Тамақ", scanHistory: "Сканерлеу тарихы", recentMeals: "Соңғы тағамдар", dailyMenu: "Күндік мәзір", coach: "AI жаттықтырушы", askCoach: "AI Coach-тен сұра", loading: "Жүктелуде...",
+  },
+} as const;
+
+function getGoalLabels(language: AppLanguage): Record<Goal, string> {
+  if (language === "en") return { lose: "Lose weight", gain: "Build muscle", fit: "Stay fit" };
+  if (language === "kk") return { lose: "Арықтау", gain: "Бұлшықет жинау", fit: "Формада болу" };
+  return goals;
+}
+
+function getLocalizedAdvice(language: AppLanguage, goal: Goal) {
+  if (language === "ru") return goalAdvice[goal];
+  const english = {
+    lose: { title: "Choose filling, protein-rich meals", note: "Focus on protein, vegetables and regular meals to stay full without excess calories." },
+    gain: { title: "Fuel muscle growth with protein and carbs", note: "Eat regular meals and add protein and carbohydrates after training." },
+    fit: { title: "Keep your plate balanced", note: "Build each meal around vegetables, protein and a quality source of carbohydrates." },
+  };
+  const kazakh = {
+    lose: { title: "Ақуызға бай тойымды тағамды таңдаңыз", note: "Артық калориясыз тоқ болу үшін ақуыз бен көкөністі таңдаңыз." },
+    gain: { title: "Бұлшықетке ақуыз бен көмірсу қажет", note: "Жаттығудан кейін ақуыз бен көмірсуды қосыңыз." },
+    fit: { title: "Табақтағы тепе-теңдікті сақтаңыз", note: "Әр асқа көкөніс, ақуыз және пайдалы көмірсу қосыңыз." },
+  };
+  return { ...goalAdvice[goal], ...(language === "en" ? english[goal] : kazakh[goal]) };
+}
+
 export default function CoachApp() {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [leaders, setLeaders] = useState<Leader[]>([]);
@@ -284,15 +317,17 @@ export default function CoachApp() {
   const [tabDirection, setTabDirection] = useState<"next" | "prev">("next");
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [theme, setTheme] = useState<AppTheme>(() => readPreferences().theme ?? "green");
-  const [language, setLanguage] = useState<AppLanguage>(() => readPreferences().language ?? "ru");
+  const [language, setLanguage] = useState<AppLanguage>(() => readPreferences().language ?? "en");
   const [avatarUrl, setAvatarUrl] = useState(() => readPreferences().avatarUrl ?? "");
   const [voice, setVoice] = useState<"Vega" | "Regulus">(() => readPreferences().voice ?? "Vega");
   const [isWorkoutSessionOpen, setIsWorkoutSessionOpen] = useState(false);
   const [workoutStep, setWorkoutStep] = useState(0);
   const [restSeconds, setRestSeconds] = useState(30);
   const [isResting, setIsResting] = useState(false);
+  const [areAllLeadersVisible, setAreAllLeadersVisible] = useState(false);
   const swipeStart = useRef<{ x: number; y: number } | null>(null);
   const navItems = getNavItems(language);
+  const copy = appCopy[language];
 
   const plan = useMemo(() => {
     const base = Math.round(10 * weight + 6.25 * height - 120);
@@ -303,7 +338,8 @@ export default function CoachApp() {
     return { calories, protein, burned };
   }, [goal, height, minutes, weight]);
 
-  const currentAdvice = goalAdvice[goal];
+  const currentAdvice = getLocalizedAdvice(language, goal);
+  const goalLabels = getGoalLabels(language);
   const currentMealPlans = mealPlans[goal];
   const dailyMealIndex = getDailyMealIndex(currentTime, currentMealPlans.length);
   const currentMealPlanIndex = (dailyMealIndex + mealIndex) % currentMealPlans.length;
@@ -316,7 +352,8 @@ export default function CoachApp() {
   const streakSecondsLeft = activeStats.streakDeadlineAt > 0 ? Math.floor((activeStats.streakDeadlineAt - currentTime) / 1000) : 0;
   const streakDisplay = formatSignedTime(streakSecondsLeft);
   const isStreakInGrace = streakSecondsLeft < 0;
-  const leaderboard = leaders;
+  const leaderboard = leaders.slice(0, 15);
+  const visibleLeaders = areAllLeadersVisible ? leaderboard : leaderboard.slice(0, 4);
   const todayFood = useMemo(() => getFoodSummary(foodHistory, "today", currentTime), [currentTime, foodHistory]);
   const weekFood = useMemo(() => getFoodSummary(foodHistory, "week", currentTime), [currentTime, foodHistory]);
   const foodProgress = Math.min(100, Math.round((todayFood.calories / Math.max(1, plan.calories)) * 100));
@@ -637,7 +674,7 @@ export default function CoachApp() {
         body: JSON.stringify({
           messages: nextMessages,
           context: {
-            goal: goals[goal],
+            goal: goalLabels[goal],
             weight,
             height,
             minutes,
@@ -671,7 +708,7 @@ export default function CoachApp() {
     try {
       const formData = new FormData();
       formData.append("image", file);
-      formData.append("goal", goals[goal]);
+      formData.append("goal", goalLabels[goal]);
 
       const response = await fetch("/api/scan-food", {
         method: "POST",
@@ -695,7 +732,7 @@ export default function CoachApp() {
   if (isAuthLoading) {
     return (
       <main className="grid min-h-screen place-items-center bg-[#14211b] p-4 text-[#172018]">
-        <div className="rounded-lg border border-[#dfe5d8] bg-white p-6 text-lg font-black shadow-sm">Загрузка...</div>
+        <div className="rounded-lg border border-[#dfe5d8] bg-white p-6 text-lg font-black shadow-sm">{copy.loading}</div>
       </main>
     );
   }
@@ -708,7 +745,7 @@ export default function CoachApp() {
             <div className="grid size-11 place-items-center rounded-lg bg-[#1f3327] font-black text-white">AI</div>
             <div>
               <p className="text-xs font-bold uppercase text-[#2c8a72]">Health Core</p>
-              <h1 className="text-2xl font-black">Будьте Здоровы</h1>
+              <h1 className="text-2xl font-black">{language === "en" ? "Feel your best" : language === "kk" ? "Дені сау болыңыз" : "Будьте Здоровы"}</h1>
             </div>
           </div>
 
@@ -722,7 +759,7 @@ export default function CoachApp() {
                 authMode === "login" ? "bg-[#1f3327] text-white" : "text-[#59665d]"
               }`}
             >
-              Войти
+              {language === "en" ? "Sign in" : language === "kk" ? "Кіру" : "Войти"}
             </button>
             <button
               onClick={() => {
@@ -733,7 +770,7 @@ export default function CoachApp() {
                 authMode === "register" ? "bg-[#1f3327] text-white" : "text-[#59665d]"
               }`}
             >
-              Регистрация
+              {language === "en" ? "Register" : language === "kk" ? "Тіркелу" : "Регистрация"}
             </button>
           </div>
 
@@ -745,7 +782,7 @@ export default function CoachApp() {
             }}
           >
             <label className="block">
-              <span className="text-sm font-bold text-[#59665d]">Логин</span>
+              <span className="text-sm font-bold text-[#59665d]">{language === "en" ? "Username" : language === "kk" ? "Логин" : "Логин"}</span>
               <input
                 value={authLogin}
                 onChange={(event) => setAuthLogin(event.target.value)}
@@ -755,7 +792,7 @@ export default function CoachApp() {
               />
             </label>
             <label className="block">
-              <span className="text-sm font-bold text-[#59665d]">Пароль</span>
+              <span className="text-sm font-bold text-[#59665d]">{language === "en" ? "Password" : language === "kk" ? "Құпиясөз" : "Пароль"}</span>
               <input
                 value={authPassword}
                 onChange={(event) => setAuthPassword(event.target.value)}
@@ -804,19 +841,19 @@ export default function CoachApp() {
           </div>
 
           <div className="mt-5 rounded-lg bg-[#f2f5ee] p-3">
-            <p className="text-xs font-bold text-[#59665d]">Аккаунт</p>
+            <p className="text-xs font-bold text-[#59665d]">{copy.account}</p>
             <div className="mt-1 flex items-center justify-between gap-3">
               <p className="min-w-0 truncate text-lg font-black">{user.login}</p>
               <button onClick={() => setIsSettingsOpen(true)} className="rounded-md bg-white px-2 py-1 text-xs font-black text-[#1f3327]" aria-label="Settings">⚙</button>
               <button onClick={logout} className="rounded-md bg-white px-2 py-1 text-xs font-black text-[#1f3327]">
-                Выйти
+                {copy.logout}
               </button>
             </div>
           </div>
 
           <div className="mt-6 space-y-4">
-            <Field label="Вес" value={weight} setValue={setWeight} suffix="кг" min={45} max={150} />
-            <Field label="Рост" value={height} setValue={setHeight} suffix="см" min={145} max={210} />
+            <Field label={copy.weight} value={weight} setValue={setWeight} suffix={language === "en" ? "kg" : "кг"} min={45} max={150} />
+            <Field label={copy.height} value={height} setValue={setHeight} suffix={language === "en" ? "cm" : "см"} min={145} max={210} />
 
             <label className="block">
               <span className="text-sm font-bold text-[#59665d]">Тренировка: {minutes} мин</span>
@@ -900,7 +937,7 @@ export default function CoachApp() {
 
             <div className="rounded-lg border border-[#dfe5d8] bg-white p-4">
               <div className="flex items-center justify-between">
-                <h2 className="text-lg font-black">Лидеры</h2>
+                <h2 className="text-lg font-black">{copy.leaders}</h2>
                 <span className="text-xs font-black text-[#59665d]">дни / мин / стрик</span>
               </div>
 
@@ -911,7 +948,7 @@ export default function CoachApp() {
                   </p>
                 ) : null}
 
-                {leaderboard.map((leader, index) => (
+                {visibleLeaders.map((leader, index) => (
                   <div key={leader.name} className="grid grid-cols-[28px_1fr_auto] items-center gap-2 rounded-lg bg-[#f2f5ee] p-2">
                     <span className="grid size-7 place-items-center rounded-md bg-white text-xs font-black text-[#2c8a72]">
                       {index + 1}
@@ -923,6 +960,14 @@ export default function CoachApp() {
                     <p className="text-sm font-black text-[#1f3327]">{leader.minutes} мин</p>
                   </div>
                 ))}
+                {leaderboard.length > 4 ? (
+                  <button
+                    onClick={() => setAreAllLeadersVisible((visible) => !visible)}
+                    className="w-full rounded-lg bg-white px-3 py-2 text-sm font-black text-[#1f3327]"
+                  >
+                    {areAllLeadersVisible ? (language === "ru" ? "Скрыть" : language === "kk" ? "Жасыру" : "Show less") : (language === "ru" ? `Показать всех (${leaderboard.length})` : language === "kk" ? `Барлығын көрсету (${leaderboard.length})` : `Show all (${leaderboard.length})`)}
+                  </button>
+                ) : null}
               </div>
             </div>
           </div>
@@ -932,8 +977,8 @@ export default function CoachApp() {
           <div className={`${activeNav === "home" ? "block" : "hidden"} rounded-lg border border-[#dfe5d8] bg-white p-5 shadow-sm`}>
             <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
               <div>
-                <p className="text-sm font-bold text-[#59665d]">Твой персональный план</p>
-                <h2 className="mt-1 text-3xl font-black">Тренировки, питание и AI-советы</h2>
+                <p className="text-sm font-bold text-[#59665d]">{copy.plan}</p>
+                <h2 className="mt-1 text-3xl font-black">{copy.headline}</h2>
               </div>
 
               <div className="grid grid-cols-3 gap-2 rounded-lg bg-[#eef2ea] p-1">
@@ -945,7 +990,7 @@ export default function CoachApp() {
                       goal === item ? "bg-[#1f3327] text-white" : "text-[#59665d]"
                     }`}
                   >
-                    {goals[item]}
+                    {goalLabels[item]}
                   </button>
                 ))}
               </div>
@@ -953,14 +998,14 @@ export default function CoachApp() {
           </div>
 
           <div className={`${activeNav === "home" ? "grid" : "hidden"} gap-5 md:grid-cols-3`}>
-            <Card label="Калории" value={`${plan.calories} ккал`} />
-            <Card label="Белок" value={`${plan.protein} г`} />
-            <Card label="Тренировка" value={`${plan.burned} ккал`} />
+            <Card label={copy.calories} value={`${plan.calories} ${language === "en" ? "kcal" : "ккал"}`} />
+            <Card label={copy.protein} value={`${plan.protein} ${language === "en" ? "g" : "г"}`} />
+            <Card label={copy.workout} value={`${plan.burned} ${language === "en" ? "kcal" : "ккал"}`} />
           </div>
 
           <div className={`${activeNav === "home" ? "grid" : "hidden"} gap-5 lg:grid-cols-[1fr_1fr]`}>
             <div className="rounded-lg border border-[#dfe5d8] bg-white p-5 shadow-sm">
-              <p className="text-sm font-bold text-[#59665d]">Совет под цель</p>
+              <p className="text-sm font-bold text-[#59665d]">{copy.advice}</p>
               <h3 className="mt-1 text-2xl font-black">{currentAdvice.title}</h3>
               <div className="mt-4 flex flex-wrap gap-2">
                 {currentAdvice.foods.map((food) => (
@@ -975,8 +1020,8 @@ export default function CoachApp() {
             <div className="rounded-lg border border-[#dfe5d8] bg-white p-5 shadow-sm">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                  <p className="text-sm font-bold text-[#59665d]">Домашняя тренировка</p>
-                  <h3 className="mt-1 text-2xl font-black">Быстрый старт</h3>
+                  <p className="text-sm font-bold text-[#59665d]">{copy.homeWorkout}</p>
+                  <h3 className="mt-1 text-2xl font-black">{copy.quickStart}</h3>
                 </div>
                 <button
                   onClick={beginWorkoutSession}
@@ -1045,8 +1090,8 @@ export default function CoachApp() {
           <div className={`${activeNav === "food" || activeNav === "history" ? "block" : "hidden"} rounded-lg border border-[#dfe5d8] bg-[#1f3327] p-5 text-white shadow-sm`}>
             <div className={`${activeNav === "food" ? "grid" : "hidden"} gap-5 lg:grid-cols-[0.9fr_1.1fr]`}>
               <div>
-                <p className="text-sm font-bold text-[#b8cdbf]">Food scanner</p>
-                <h3 className="mt-1 text-2xl font-black">Покажи еду AI</h3>
+                <p className="text-sm font-bold text-[#b8cdbf]">{copy.scanner}</p>
+                <h3 className="mt-1 text-2xl font-black">{copy.scanTitle}</h3>
                 <p className="mt-2 text-sm font-semibold leading-6 text-[#dbe8df]">
                   Сделай фото блюда на телефоне или загрузи картинку. AI-Тренер оценит порцию, калории и КБЖУ, а фото не сохранит.
                 </p>
@@ -1145,8 +1190,8 @@ export default function CoachApp() {
               <div className="rounded-lg bg-white p-4 text-[#172018]">
                 <div className="flex items-center justify-between gap-3">
                   <div>
-                    <p className="text-sm font-bold text-[#59665d]">История сканов</p>
-                    <h4 className="mt-1 text-xl font-black">Последние блюда</h4>
+                    <p className="text-sm font-bold text-[#59665d]">{copy.scanHistory}</p>
+                    <h4 className="mt-1 text-xl font-black">{copy.recentMeals}</h4>
                   </div>
                   <span className="rounded-md bg-[#f2f5ee] px-2 py-1 text-xs font-black text-[#59665d]">
                     {foodHistory.length}/50
@@ -1189,7 +1234,7 @@ export default function CoachApp() {
                 <div className="flex items-center gap-2">
                   <span className="rounded-md bg-[#e7f4ee] px-2 py-1 text-sm font-black text-[#2c8a72]">Food</span>
                   <div>
-                    <h3 className="text-xl font-black">Меню на день</h3>
+                    <h3 className="text-xl font-black">{copy.dailyMenu}</h3>
                     <p className="mt-1 text-sm font-bold text-[#59665d]">
                       {currentMenuDate} · {currentMealPlan.title} · меню #{currentMealPlanIndex + 1}
                     </p>
@@ -1236,7 +1281,7 @@ export default function CoachApp() {
             <div className={`${activeNav === "chat" ? "block" : "hidden"} rounded-lg border border-[#dfe5d8] bg-white p-5 shadow-sm`}>
               <div className="mb-4 flex items-center gap-2">
                 <span className="rounded-md bg-[#e7f4ee] px-2 py-1 text-sm font-black text-[#2c8a72]">AI</span>
-                <h3 className="text-xl font-black">AI Тренер</h3>
+                <h3 className="text-xl font-black">{copy.coach}</h3>
                 <div className="ml-auto flex gap-1">
                   {(["Vega", "Regulus"] as const).map((item) => <button key={item} onClick={() => setVoice(item)} className={`rounded-md px-2 py-1 text-xs font-black ${voice === item ? "bg-[#1f3327] text-white" : "bg-[#eef2ea] text-[#59665d]"}`}>{item === "Vega" ? "♀ Vega" : "♂ Regulus"}</button>)}
                 </div>
@@ -1274,7 +1319,7 @@ export default function CoachApp() {
                   value={question}
                   onChange={(event) => setQuestion(event.target.value)}
                   className="min-w-0 flex-1 rounded-lg border border-[#dfe5d8] px-4 py-3 text-sm font-semibold outline-none focus:border-[#1f3327]"
-                  placeholder="Спроси AI Coach"
+                  placeholder={copy.askCoach}
                 />
                 <button
                   type="submit"
