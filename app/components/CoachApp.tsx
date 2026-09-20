@@ -546,6 +546,22 @@ export default function CoachApp() {
   }
 
   function speakCoach(text: string) {
+    void speakWithElevenLabs(text);
+  }
+
+  async function speakWithElevenLabs(text: string) {
+    try {
+      const response = await fetch("/api/tts", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text, voice, language }) });
+      if (response.ok) {
+        window.speechSynthesis.cancel();
+        const audioUrl = URL.createObjectURL(await response.blob());
+        const audio = new Audio(audioUrl);
+        audio.onended = () => URL.revokeObjectURL(audioUrl);
+        await audio.play();
+        return;
+      }
+    } catch { /* Use the browser as a no-key/offline fallback. */ }
+
     if (!("speechSynthesis" in window)) return;
     window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(text);
