@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState, type TouchEvent } from "react";
 
 type Goal = "lose" | "gain" | "fit";
 type Difficulty = "easy" | "medium" | "hard";
-type NavItemId = "home" | "food" | "history" | "chat";
+type NavItemId = "home" | "food" | "history" | "chat" | "profile";
 type AppTheme = "green" | "blue" | "violet" | "graphite" | "light";
 type AppLanguage = "ru" | "en" | "kk";
 
@@ -242,12 +242,12 @@ const initialMessages: ChatMessage[] = [
 
 function getNavItems(language: AppLanguage): Array<{ id: NavItemId; label: string }> {
   const labels = {
-    ru: ["Главная", "Питание", "История", "Чат"],
-    en: ["Home", "Food", "History", "Chat"],
-    kk: ["Басты", "Тамақ", "Тарих", "Чат"],
+    ru: ["Главная", "Питание", "История", "Чат", "Профиль"],
+    en: ["Home", "Food", "History", "Chat", "Profile"],
+    kk: ["Басты", "Тамақ", "Тарих", "Чат", "Профиль"],
   } as const;
-  const [home, food, history, chat] = labels[language];
-  return [{ id: "home", label: home }, { id: "food", label: food }, { id: "history", label: history }, { id: "chat", label: chat }];
+  const [home, food, history, chat, profile] = labels[language];
+  return [{ id: "home", label: home }, { id: "food", label: food }, { id: "history", label: history }, { id: "chat", label: chat }, { id: "profile", label: profile }];
 }
 
 const appCopy = {
@@ -293,8 +293,8 @@ export default function CoachApp() {
   const [authPassword, setAuthPassword] = useState("");
   const [authError, setAuthError] = useState("");
   const [goal, setGoal] = useState<Goal>("lose");
-  const [weight, setWeight] = useState(78);
-  const [height, setHeight] = useState(176);
+  const [weight, setWeight] = useState(() => readPreferences().weight ?? 78);
+  const [height, setHeight] = useState(() => readPreferences().height ?? 176);
   const [minutes, setMinutes] = useState(35);
   const [timerSeconds, setTimerSeconds] = useState(minutes * 60);
   const [isTimerRunning, setIsTimerRunning] = useState(false);
@@ -325,6 +325,7 @@ export default function CoachApp() {
   const [restSeconds, setRestSeconds] = useState(30);
   const [isResting, setIsResting] = useState(false);
   const [areAllLeadersVisible, setAreAllLeadersVisible] = useState(false);
+  const [isListening, setIsListening] = useState(false);
   const swipeStart = useRef<{ x: number; y: number } | null>(null);
   const navItems = getNavItems(language);
   const copy = appCopy[language];
@@ -363,8 +364,8 @@ export default function CoachApp() {
   }, []);
 
   useEffect(() => {
-    window.localStorage.setItem("pulsepilot-preferences", JSON.stringify({ theme, language, avatarUrl, voice }));
-  }, [theme, language, avatarUrl, voice]);
+    window.localStorage.setItem("pulsepilot-preferences", JSON.stringify({ theme, language, avatarUrl, voice, weight, height }));
+  }, [theme, language, avatarUrl, voice, weight, height]);
 
   useEffect(() => {
     if (!isResting) return;
@@ -554,6 +555,23 @@ export default function CoachApp() {
     window.speechSynthesis.speak(utterance);
   }
 
+  function startVoiceMessage() {
+    const SpeechRecognition = (window as typeof window & { SpeechRecognition?: new () => { lang: string; interimResults: boolean; onresult: (event: { results: ArrayLike<ArrayLike<{ transcript: string }>> }) => void; onend: () => void; onerror: () => void; start: () => void } }).SpeechRecognition
+      ?? (window as typeof window & { webkitSpeechRecognition?: new () => { lang: string; interimResults: boolean; onresult: (event: { results: ArrayLike<ArrayLike<{ transcript: string }>> }) => void; onend: () => void; onerror: () => void; start: () => void } }).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      setChatError(language === "en" ? "Voice input is not supported in this browser. Use Chrome or Edge." : language === "kk" ? "Бұл браузер дауыстық енгізуді қолдамайды. Chrome немесе Edge пайдаланыңыз." : "Этот браузер не поддерживает голосовой ввод. Используйте Chrome или Edge.");
+      return;
+    }
+    const recognition = new SpeechRecognition();
+    recognition.lang = language === "kk" ? "kk-KZ" : language === "en" ? "en-US" : "ru-RU";
+    recognition.interimResults = false;
+    recognition.onresult = (event) => setQuestion(event.results[0]?.[0]?.transcript ?? "");
+    recognition.onend = () => setIsListening(false);
+    recognition.onerror = () => setIsListening(false);
+    setIsListening(true);
+    recognition.start();
+  }
+
   function saveAvatar(file: File) {
     if (!file.type.startsWith("image/")) return;
     const reader = new FileReader();
@@ -692,6 +710,7 @@ export default function CoachApp() {
       }
 
       setMessages((currentMessages) => [...currentMessages, { role: "model", text: data.answer }]);
+      speakCoach(data.answer);
     } catch (error) {
       setChatError(error instanceof Error ? error.message : "Ошибка AI Coach");
     } finally {
@@ -1321,6 +1340,7 @@ export default function CoachApp() {
                   className="min-w-0 flex-1 rounded-lg border border-[#dfe5d8] px-4 py-3 text-sm font-semibold outline-none focus:border-[#1f3327]"
                   placeholder={copy.askCoach}
                 />
+                <button type="button" onClick={startVoiceMessage} className={`grid size-12 shrink-0 place-items-center rounded-lg text-lg font-black ${isListening ? "bg-[#2c8a72] text-white" : "bg-[#eef2ea] text-[#1f3327]"}`} aria-label="Voice message" title="Voice message">🎙</button>
                 <button
                   type="submit"
                   disabled={isAsking}
@@ -1328,7 +1348,7 @@ export default function CoachApp() {
                   aria-label="Спросить"
                   title="Спросить"
                 >
-                  AI
+                  ➤
                 </button>
               </form>
             </div>
@@ -1339,8 +1359,10 @@ export default function CoachApp() {
       {isSettingsOpen ? <SettingsModal theme={theme} language={language} avatarUrl={avatarUrl} voice={voice} onClose={() => setIsSettingsOpen(false)} onTheme={setTheme} onLanguage={changeLanguage} onAvatar={saveAvatar} onRemoveAvatar={() => setAvatarUrl("")} onVoice={setVoice} /> : null}
       {isWorkoutSessionOpen ? <WorkoutSession move={workoutMoves[workoutStep]} index={workoutStep} total={workoutMoves.length} isResting={isResting} restSeconds={restSeconds} timerSeconds={timerSeconds} onPause={pauseTrainingTimer} onStop={() => { setIsWorkoutSessionOpen(false); pauseTrainingTimer(); }} onNext={nextWorkoutStep} onSpeak={() => speakCoach(isResting ? `Отдых ${restSeconds} секунд` : `${workoutMoves[workoutStep].name}. ${workoutMoves[workoutStep].base} ${workoutMoves[workoutStep].unit}`)} /> : null}
 
+      {activeNav === "profile" ? <section className="mx-auto w-full max-w-2xl px-4 pb-8"><div className="rounded-[28px] border border-[#dfe5d8] bg-white p-6 shadow-sm"><div className="flex items-center gap-4">{avatarUrl ? <img src={avatarUrl} alt="Profile" className="size-20 rounded-2xl object-cover" /> : <div className="grid size-20 place-items-center rounded-2xl bg-[#1f3327] text-2xl font-black text-white">HC</div>}<div><p className="text-sm font-bold text-[#59665d]">Health Core</p><h2 className="text-3xl font-black">{user.login}</h2></div></div><div className="mt-7 grid gap-4 sm:grid-cols-2"><Field label={copy.weight} value={weight} setValue={setWeight} suffix={language === "en" ? "kg" : "кг"} min={45} max={150} /><Field label={copy.height} value={height} setValue={setHeight} suffix={language === "en" ? "cm" : "см"} min={145} max={210} /></div><button onClick={() => setIsSettingsOpen(true)} className="mt-6 w-full rounded-xl bg-[#1f3327] px-4 py-3 text-sm font-black text-white">{language === "en" ? "Profile settings" : language === "kk" ? "Профиль баптаулары" : "Настройки профиля"}</button><p className="mt-3 text-center text-xs font-semibold text-[#59665d]">{language === "en" ? "Your measurements are saved on this device and update your plan immediately." : language === "kk" ? "Өлшемдеріңіз осы құрылғыда сақталып, жоспарды бірден жаңартады." : "Ваши параметры сохраняются на этом устройстве и сразу обновляют план."}</p></div></section> : null}
+
       <nav className="bottom-nav fixed z-50 max-w-lg rounded-[32px] border border-[#dfe5d8] bg-white/92 p-1.5 shadow-[0_18px_50px_rgba(0,0,0,0.24)] backdrop-blur-md">
-        <div className="grid grid-cols-4 items-center gap-1">
+        <div className="grid grid-cols-5 items-center gap-1">
           {navItems.map((item) => {
             const isActive = activeNav === item.id;
 
@@ -1366,7 +1388,7 @@ export default function CoachApp() {
   );
 }
 
-function readPreferences(): Partial<{ theme: AppTheme; language: AppLanguage; avatarUrl: string; voice: "Vega" | "Regulus" }> {
+function readPreferences(): Partial<{ theme: AppTheme; language: AppLanguage; avatarUrl: string; voice: "Vega" | "Regulus"; weight: number; height: number }> {
   if (typeof window === "undefined") return {};
   try { return JSON.parse(window.localStorage.getItem("pulsepilot-preferences") || "{}"); } catch { return {}; }
 }
@@ -1429,6 +1451,10 @@ function NavIcon({ id, active }: { id: NavItemId; active: boolean }) {
         <path d="M12 8v5l3 2" />
       </svg>
     );
+  }
+
+  if (id === "profile") {
+    return <svg {...commonProps} fill="none" stroke={color} strokeLinecap="round" strokeLinejoin="round" strokeWidth="2"><circle cx="12" cy="8" r="3.5" /><path d="M5 21c.8-4 3.1-6 7-6s6.2 2 7 6" /></svg>;
   }
 
   if (id === "chat") {
